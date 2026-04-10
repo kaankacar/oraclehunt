@@ -1,0 +1,9 @@
+ANTHROPIC_API_KEY=sk-ant-...
+ORACLE_TREASURY_ADDRESS=G...
+USDC_CONTRACT=C...
+FINGERPRINT_SALT=your-random-secret-string
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+ZK_CONTRACT_ID=PLACEHOLDER
+INFORMANT_PASSPHRASE=ZEROPHASE
+ADMIN_CORS_ORIGIN=https://your-next-app.vercel.app

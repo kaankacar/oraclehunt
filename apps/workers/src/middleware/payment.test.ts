@@ -1,0 +1,210 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { Hono } from 'hono'
+
+// Mock x402 modules
+vi.mock('@x402/hono', () => ({
+  paymentMiddleware: vi.fn((_routes, _config) => {
+    return async (c: any, next: any) => {
+      const paymentHeader = c.req.header('PAYMENT-SIGNATURE')
+
+      if (!paymentHeader) {
+        c.res = new Response(
+          JSON.stringify({ error: 'Payment required', x402Version: 1 }),
+          {
+            status: 402,
+            headers: {
+              'Content-Type': 'application/json',
+              'PAYMENT-REQUIRED': 'eyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdGVsbGFyOnB1Ym5ldCJ9',
+            },
+          },
+        )
+        return
+      }
+
+      // Simulate signature validation
+      if (paymentHeader === 'INVALID') {
+        c.res = new Response(JSON.stringify({ error: 'Invalid payment' }), { status: 402 })
+        return
+      }
+
+      if (paymentHeader === 'INSUFFICIENT') {
+        c.res = new Response(JSON.stringify({ error: 'Insufficient payment amount' }), { status: 402 })
+        return
+      }
+
+      if (paymentHeader === 'EXPIRED') {
+        c.res = new Response(JSON.stringify({ error: 'Payment expired' }), { status: 402 })
+        return
+      }
+
+      await next()
+    }
+  }),
+}))
+
+vi.mock('@x402/core/server', () => ({
+  facilitatorConfig: vi.fn(() => ({})),
+}))
+
+vi.mock('@x402/stellar/exact/server', () => ({
+  ExactStellarScheme: vi.fn().mockImplementation(() => ({})),
+}))
+
+vi.mock('../oracles/handler', () => ({
+  handleOracle: vi.fn().mockResolvedValue({
+    artifact: 'Test prophecy',
+    oracleId: 'seer',
+    timestamp: '2026-01-01T00:00:00.000Z',
+  }),
+}))
+
+vi.mock('../oracles/hidden', () => ({
+  handleHiddenOracle: vi.fn().mockResolvedValue({
+    fingerprint: 'abc123def456',
+    zkPortrait: 'A portrait of cosmic identity',
+    timestamp: '2026-01-01T00:00:00.000Z',
+  }),
+}))
+
+const mockEnv = {
+  ANTHROPIC_API_KEY: 'test-key',
+  ORACLE_TREASURY_ADDRESS: 'GBTEST123',
+  USDC_CONTRACT: 'CUSDC123',
+  FINGERPRINT_SALT: 'test-salt',
+  SUPABASE_URL: 'https://test.supabase.co',
+  SUPABASE_SERVICE_KEY: 'test-service-key',
+  ZK_CONTRACT_ID: 'PLACEHOLDER',
+  INFORMANT_PASSPHRASE: 'ZEROPHASE',
+  STELLAR_NETWORK: 'pubnet',
+}
+
+function buildApp() {
+  // Re-import to get fresh mocked version
+  const { default: app } = require('../index')
+  return app
+}
+
+describe('x402 payment middleware', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('returns 402 with PAYMENT-REQUIRED header on unpaid request', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/seer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'Tell my fortune', walletAddress: 'GTEST' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(402)
+    expect(res.headers.get('PAYMENT-REQUIRED')).not.toBeNull()
+  })
+
+  it('returns 200 with artifact on valid payment', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/seer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'PAYMENT-SIGNATURE': 'VALID_PAYMENT_SIGNATURE',
+      },
+      body: JSON.stringify({ prompt: 'Tell my fortune', walletAddress: 'GTEST' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toHaveProperty('artifact')
+    expect(body).toHaveProperty('oracleId', 'seer')
+  })
+
+  it('returns 402 on invalid payment signature', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/seer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'PAYMENT-SIGNATURE': 'INVALID',
+      },
+      body: JSON.stringify({ prompt: 'Tell my fortune', walletAddress: 'GTEST' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(402)
+  })
+
+  it('returns 402 on insufficient payment amount', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/seer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'PAYMENT-SIGNATURE': 'INSUFFICIENT',
+      },
+      body: JSON.stringify({ prompt: 'Tell my fortune', walletAddress: 'GTEST' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(402)
+  })
+
+  it('returns 402 on expired payment', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/seer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'PAYMENT-SIGNATURE': 'EXPIRED',
+      },
+      body: JSON.stringify({ prompt: 'Tell my fortune', walletAddress: 'GTEST' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(402)
+  })
+
+  it('returns 404 for unknown oracle', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/unknown', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'PAYMENT-SIGNATURE': 'VALID' },
+      body: JSON.stringify({ prompt: 'test', walletAddress: 'GTEST' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 403 on wrong Hidden Oracle passphrase', async () => {
+    const { default: app } = await import('../index')
+    // Mock handleHiddenOracle to throw INVALID_PASSPHRASE
+    const { handleHiddenOracle } = await import('../oracles/hidden')
+    vi.mocked(handleHiddenOracle).mockRejectedValueOnce(new Error('INVALID_PASSPHRASE'))
+
+    const req = new Request('http://localhost/oracle/hidden', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: 'GTEST', passphrase: 'wrongphrase' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 200 on correct Hidden Oracle passphrase', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/hidden', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: 'GTEST', passphrase: 'ZEROPHASE' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toHaveProperty('fingerprint')
+    expect(body).toHaveProperty('zkPortrait')
+  })
+})
