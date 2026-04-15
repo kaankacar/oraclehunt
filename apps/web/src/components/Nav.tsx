@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useWallet } from './WalletProvider'
 
 export function Nav() {
-  const { displayAddress, balance, isConnected } = useWallet()
+  const { displayAddress, balance, isConnected, logout } = useWallet()
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-navy border-b border-accent/30">
@@ -37,6 +37,12 @@ export function Nav() {
                   ${balance} USDC
                 </span>
               )}
+              <button
+                onClick={logout}
+                className="text-white/40 hover:text-white/80 text-xs transition-colors"
+              >
+                Sign out
+              </button>
             </div>
           ) : (
             <Link

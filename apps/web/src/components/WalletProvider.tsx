@@ -69,20 +69,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let result: WalletResult
       let createdNewWallet = false
 
-      // Try to connect existing wallet first; create new one if none exists
-      try {
-        result = await connectWallet()
-      } catch {
-        result = await createWallet('Oracle Hunt', email)
-        createdNewWallet = true
+      // If a wallet is already stored locally, reuse it — no passkey prompt needed.
+      // This prevents a new passkey/wallet from being created on every login.
+      const stored = loadWalletFromStorage()
+      if (stored) {
+        result = stored
+      } else {
+        // No local wallet: try to connect an existing passkey, create one if none found.
+        try {
+          result = await connectWallet()
+        } catch {
+          result = await createWallet('Oracle Hunt', email)
+          createdNewWallet = true
+        }
       }
 
-      // Always upsert — ensures the wallet row exists even when reconnecting
-      // (covers DB resets and wallets created before Supabase registration was added)
+      // Always upsert so the Supabase row exists regardless of how we got here.
       const supabase = createSupabaseClient()
       await supabase.from('wallets').upsert(
         { email, stellar_address: result.contractId },
-        { onConflict: 'email' },
+        { onConflict: 'stellar_address' },
       )
 
       saveWalletToStorage(result.contractId, result.keyIdBase64)
