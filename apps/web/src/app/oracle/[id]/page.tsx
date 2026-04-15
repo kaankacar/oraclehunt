@@ -120,7 +120,22 @@ export default function OraclePage() {
                 {new Date(result.timestamp).toLocaleString()}
               </span>
             </div>
-            <p className="text-navy leading-relaxed whitespace-pre-wrap text-sm">{result.artifact}</p>
+            {result.artifactImage ? (
+              <div className="space-y-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={result.artifactImage}
+                  alt="Pixel art portrait by The Painter"
+                  className="w-full rounded-lg image-rendering-pixelated"
+                  style={{ imageRendering: 'pixelated' }}
+                />
+                {result.artifact && result.artifact !== 'Your pixel art portrait has been rendered.' && (
+                  <p className="text-navy leading-relaxed whitespace-pre-wrap text-sm">{result.artifact}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-navy leading-relaxed whitespace-pre-wrap text-sm">{result.artifact}</p>
+            )}
             {result.txHash && (
               <p className="text-xs text-navy/30 font-mono mt-4 truncate">tx: {result.txHash}</p>
             )}

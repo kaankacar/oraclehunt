@@ -1,8 +1,7 @@
 'use client'
 
 import { wrapFetchWithPayment, x402Client } from '@x402/fetch'
-import { ExactStellarScheme } from '@x402/stellar/exact/client'
-import { buildX402Signer } from './wallet'
+import { buildPasskeyPaymentScheme, loadWalletFromStorage } from './wallet'
 
 const WORKERS_URL = process.env.NEXT_PUBLIC_WORKERS_URL ?? 'http://localhost:8787'
 const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
@@ -11,6 +10,7 @@ const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
 
 export interface OracleResult {
   artifact: string
+  artifactImage?: string  // base64 data URL, present for image-generating oracles (e.g. painter)
   oracleId: string
   txHash?: string
   timestamp: string
@@ -33,10 +33,12 @@ export async function consultOracle(
   prompt: string,
   walletAddress: string,
 ): Promise<OracleResult> {
-  const signer = buildX402Signer(walletAddress)
-  const scheme = new ExactStellarScheme(signer)
+  const stored = loadWalletFromStorage()
+  if (!stored) throw new Error('No wallet found — please create or reconnect your wallet')
 
-  const client = new x402Client().register(STELLAR_NETWORK as 'stellar:pubnet' | 'stellar:testnet', scheme)
+  const scheme = buildPasskeyPaymentScheme(walletAddress, stored.keyIdBase64)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = new x402Client().register(STELLAR_NETWORK as 'stellar:pubnet' | 'stellar:testnet', scheme as any)
   const payFetch = wrapFetchWithPayment(fetch, client)
 
   const response = await payFetch(`${WORKERS_URL}/oracle/${oracleId}`, {
@@ -46,8 +48,12 @@ export async function consultOracle(
   })
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }))
-    throw new Error((err as { error?: string }).error ?? `HTTP ${response.status}`)
+    const body = await response.text().catch(() => '')
+    console.log('[x402] oracle response body:', body)
+    let err: { error?: string; message?: string } = { error: 'Unknown error' }
+    try { err = JSON.parse(body) } catch { /* ignore */ }
+    const reason = err.message ?? err.error ?? `HTTP ${response.status}`
+    throw new Error(reason)
   }
 
   return response.json() as Promise<OracleResult>

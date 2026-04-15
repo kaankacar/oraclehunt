@@ -1,9 +1,16 @@
+import { Buffer } from 'node:buffer'
+// @x402/hono uses Buffer for base64-encoding the payment response header.
+// Cloudflare Workers doesn't expose Buffer as a global even with nodejs_compat,
+// so we set it explicitly here before any x402 code runs.
+globalThis.Buffer = Buffer
+
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { paymentMiddleware } from '@x402/hono'
 import { buildPaymentRoutes, buildResourceServer } from './middleware/payment'
 import { handleOracle } from './oracles/handler'
 import { handleHiddenOracle } from './oracles/hidden'
+import { fundTestnetWallet } from './faucet'
 import type { Env, OracleId, OracleRequest } from './types'
 
 const VALID_ORACLE_IDS: OracleId[] = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant']
@@ -88,5 +95,32 @@ app.post('/oracle/hidden', async (c) => {
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
+
+// Local/testnet faucet for passkey wallets.
+app.post('/faucet', async (c) => {
+  let body: { walletAddress: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+
+  if (!body.walletAddress?.trim()) {
+    return c.json({ error: 'walletAddress is required' }, 400)
+  }
+
+  try {
+    const txHash = await fundTestnetWallet(body.walletAddress, c.env)
+    return c.json({
+      amount: '2.00',
+      asset: c.env.USDC_CONTRACT,
+      txHash,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Faucet failed'
+    return c.json({ error: message }, 500)
+  }
+})
 
 export default app

@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.0",
+    "@stellar/stellar-sdk": "^12.3.0",
     "@supabase/supabase-js": "^2.43.0",
     "@x402/core": "^2.9.0",
     "@x402/hono": "^2.9.0",

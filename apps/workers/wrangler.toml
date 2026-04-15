@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 STELLAR_NETWORK = "testnet"
 
 # Secrets (set via `wrangler secret put`):
-# ANTHROPIC_API_KEY
+# GEMINI_API_KEY
 # ORACLE_TREASURY_ADDRESS
 # USDC_CONTRACT
 # FINGERPRINT_SALT

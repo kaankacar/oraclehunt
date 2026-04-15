@@ -1,4 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
+const TEXT_MODEL = 'gemini-2.5-flash'
 import { createClient } from '@supabase/supabase-js'
 import type { Env, HiddenOracleResponse } from '../types'
 
@@ -23,25 +24,29 @@ export async function handleHiddenOracle(
   // Derive Poseidon fingerprint via Soroban contract
   const fingerprint = await deriveFingerprint(walletAddress, env)
 
-  // Generate ZK Portrait with Claude
-  const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
-
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 512,
-    system: HIDDEN_ORACLE_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `My Stellar identity fingerprint is: ${fingerprint}\n\nCreate my Zero-Knowledge Portrait.`,
-      },
-    ],
-  })
-
-  const zkPortrait = message.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('')
+  // Generate ZK Portrait with Gemini (native fetch — no SDK, Workers-compatible)
+  const geminiRes = await fetch(
+    `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: HIDDEN_ORACLE_SYSTEM_PROMPT }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `My Stellar identity fingerprint is: ${fingerprint}\n\nCreate my Zero-Knowledge Portrait.` }],
+          },
+        ],
+      }),
+    },
+  )
+  const geminiJson = await geminiRes.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    error?: { message: string }
+  }
+  if (geminiJson.error) throw new Error(`Gemini error: ${geminiJson.error.message}`)
+  const zkPortrait = geminiJson.candidates?.[0]?.content?.parts?.find(p => p.text)?.text ?? ''
 
   const timestamp = new Date().toISOString()
 

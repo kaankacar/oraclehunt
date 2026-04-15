@@ -1,9 +1,15 @@
 'use client'
 
-import { PasskeyKit } from 'passkey-kit'
+import { PasskeyKit, PasskeyClient } from 'passkey-kit'
 import { ChannelsClient } from '@openzeppelin/relayer-plugin-channels'
-import { Horizon, xdr as stellarXdr } from '@stellar/stellar-sdk'
+import {
+  contract,
+  nativeToScVal,
+  scValToNative,
+  TransactionBuilder,
+} from '@stellar/stellar-sdk'
 import type { ClientStellarSigner } from '@x402/stellar'
+import { getUsdcAddress } from '@x402/stellar'
 
 const IS_MAINNET = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
 
@@ -15,13 +21,10 @@ const NETWORK_PASSPHRASE = IS_MAINNET
   ? 'Public Global Stellar Network ; September 2015'
   : 'Test SDF Network ; September 2015'
 
-const HORIZON_URL = IS_MAINNET
-  ? 'https://horizon.stellar.org'
-  : 'https://horizon-testnet.stellar.org'
-
-const USDC_ISSUER = IS_MAINNET
-  ? 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
-  : 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5'
+const USDC_CONTRACT =
+  process.env.NEXT_PUBLIC_USDC_CONTRACT ??
+  getUsdcAddress(IS_MAINNET ? 'stellar:pubnet' : 'stellar:testnet')
+const WORKERS_URL = process.env.NEXT_PUBLIC_WORKERS_URL ?? 'http://localhost:8787'
 
 let _passkeyKit: PasskeyKit | null = null
 let _channelsClient: ChannelsClient | null = null
@@ -101,10 +104,7 @@ export async function connectWallet(): Promise<WalletResult> {
 
 /**
  * Build an x402 ClientStellarSigner backed by passkey-kit.
- *
- * passkey-kit works with SorobanAuthorizationEntry objects, while the
- * SEP-43 interface (used by x402) works with base64 XDR strings.
- * This function bridges the two.
+ * Only used for non-payment signing; oracle payments use buildPasskeyPaymentScheme.
  */
 export function buildX402Signer(contractId: string): ClientStellarSigner {
   const kit = getPasskeyKit()
@@ -112,53 +112,212 @@ export function buildX402Signer(contractId: string): ClientStellarSigner {
   return {
     address: contractId,
 
-    // SEP-43 signAuthEntry: receives base64 XDR string, returns { signedAuthEntry: string }
-    signAuthEntry: async (authEntryXdr: string) => {
-      // Decode base64 XDR string → SorobanAuthorizationEntry object.
-      // passkey-kit and @x402/stellar use different patch versions of stellar-base,
-      // so we cast through unknown to sidestep the incompatible XDR type versions.
-      // At runtime the structures are identical.
-      const entry = stellarXdr.SorobanAuthorizationEntry.fromXDR(authEntryXdr, 'base64')
-      const signed = await kit.signAuthEntry(entry as unknown as Parameters<typeof kit.signAuthEntry>[0])
-      return {
-        signedAuthEntry: (signed as unknown as { toXDR: (enc: string) => string }).toXDR('base64'),
-        signerAddress: contractId,
-      }
+    signAuthEntry: async (_authEntryXdr: string) => {
+      // This path is not used for oracle payments — see buildPasskeyPaymentScheme.
+      throw new Error('Use buildPasskeyPaymentScheme for oracle payments')
     },
 
-    // SEP-43 signTransaction: receives XDR string, returns { signedTxXdr: string }
     signTransaction: async (txXdr: string) => {
-      // kit.sign() accepts a raw XDR string and returns the signed AssembledTransaction
       const signed = await kit.sign(txXdr)
-
-      // Extract the signed XDR
       const signedTxXdr =
         typeof signed === 'string'
           ? signed
           : (signed as unknown as { toXDR: () => string }).toXDR()
-
       return { signedTxXdr, signerAddress: contractId }
     },
   }
 }
 
 /**
- * Fetch USDC balance for a Stellar address via Horizon.
+ * Build a custom x402-compatible payment scheme backed by passkey-kit.
+ *
+ * ExactStellarScheme.createPaymentPayload calls tx.signAuthEntries({ signAuthEntry }),
+ * but stellar-sdk v14 wraps that callback and passes it a HashIdPreimage — not a
+ * SorobanAuthorizationEntry. Passkey-kit needs the full entry. The authorizeEntry
+ * option bypasses the wrapper entirely, which is how passkey-kit's own sign() works.
+ */
+export function buildPasskeyPaymentScheme(walletContractId: string, keyIdBase64: string) {
+  const kit = getPasskeyKit()
+
+  return {
+    scheme: 'exact' as const,
+
+    async createPaymentPayload(x402Version: number, paymentRequirements: {
+      network: string
+      payTo: string
+      asset: string
+      amount: string
+      extra: { areFeesSponsored?: boolean }
+      maxTimeoutSeconds: number
+    }) {
+      const { network, payTo, asset, amount, extra, maxTimeoutSeconds } = paymentRequirements
+
+      if (!extra.areFeesSponsored) {
+        throw new Error('Exact scheme requires areFeesSponsored to be true')
+      }
+
+      const networkPassphrase = network === 'stellar:testnet'
+        ? 'Test SDF Network ; September 2015'
+        : 'Public Global Stellar Network ; September 2015'
+
+      const rpcUrl = network === 'stellar:testnet'
+        ? 'https://soroban-testnet.stellar.org'
+        : 'https://soroban-mainnet.stellar.org'
+
+      // Get current ledger for expiration calculation
+      const latestRes = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getLatestLedger' }),
+      })
+      const latestJson = await latestRes.json() as { result: { sequence: number } }
+      const currentLedger = latestJson.result.sequence
+      const maxLedger = currentLedger + Math.ceil(maxTimeoutSeconds / 5)
+
+      // Build the USDC transfer transaction
+      const tx = await contract.AssembledTransaction.build({
+        contractId: asset,
+        method: 'transfer',
+        args: [
+          nativeToScVal(walletContractId, { type: 'address' }),
+          nativeToScVal(payTo, { type: 'address' }),
+          nativeToScVal(amount, { type: 'i128' }),  // string form matches official ExactStellarScheme
+        ],
+        networkPassphrase,
+        rpcUrl,
+        parseResultXdr: (result) => result,
+      })
+
+      if (!tx.simulation) throw new Error('Stellar simulation failed')
+      if ('error' in tx.simulation) throw new Error(`Stellar simulation failed: ${(tx.simulation as { error: string }).error}`)
+
+      // Sign the assembled transaction using kit.sign(txXdr).
+      //
+      // Why not call kit.signAuthEntry directly?
+      // kit.signAuthEntry expects a SorobanAuthorizationEntry decoded by passkey-kit's
+      // own xdr module (its stellar-sdk import). When we pass an entry decoded by OUR
+      // stellar-sdk, the nonce (an Int64 instance from our module) gets embedded into
+      // passkey-kit's HashIdPreimage. If the two modules diverge (different class
+      // registries — possible even with symlinks:true in some webpack configurations),
+      // preimage.toXDR() throws "XDR Write Error: [nonce] is not a O".
+      //
+      // kit.sign(txXdr) avoids this entirely: it calls AssembledTransaction.fromXDR
+      // using passkey-kit's own stellar-sdk, producing all-passkey-kit class instances
+      // throughout the sign flow. No cross-module boundary is crossed.
+      //
+      // AssembledTransaction.fromXDR works for arbitrary InvokeHostFunction txs — it
+      // only extracts the method name and sets txn.built; it does not validate the spec.
+      // kit.sign() needs kit.wallet to be set (it uses wallet.options.contractId
+      // as the address for signAuthEntries and wallet.spec for AssembledTransaction.fromXDR).
+      // If the user restored their session from localStorage without calling connectWallet(),
+      // kit.wallet is undefined. Initialize it here using the provided contractId.
+      if (!kit.wallet) {
+        kit.wallet = new PasskeyClient({
+          contractId: walletContractId,
+          rpcUrl,
+          networkPassphrase,
+        })
+      }
+
+      let txXdr: string
+      try {
+        // Serialize our assembled (unsigned) tx to base64. At this point auth entries
+        // are freshly simulated with no cross-bundle objects, so toXDR() is safe.
+        const unsignedTxXdr = tx.toXDR()
+        // kit.sign decodes the XDR inside passkey-kit's bundle, signs auth entries
+        // there, and returns its own AssembledTransaction with the signed built tx.
+        const signedTxn = await kit.sign(unsignedTxXdr, { keyId: keyIdBase64, expiration: maxLedger })
+
+        // Extract the signed transaction XDR from passkey-kit's AssembledTransaction.
+        const signedTxXdr = (signedTxn as unknown as { toXDR: () => string }).toXDR()
+
+        // The first simulation computed the fee WITHOUT a real signature in the auth
+        // entry (signature = scvVoid). The passkey wallet's __check_auth verifies a
+        // secp256r1/WebAuthn signature — an expensive operation that is NOT counted in
+        // the first simulation. The facilitator re-simulates our signed tx and finds
+        // clientFee < minResourceFee → rejects with fee_below_minimum.
+        //
+        // Fix: update tx.built with the signed transaction, then re-simulate.
+        // assembleTransaction (called inside tx.simulate()) preserves existing signed
+        // auth entries and only updates sorobanData + fee from the new simulation.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tx.built = TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase) as any
+
+        await tx.simulate()
+        if (!tx.simulation) throw new Error('Re-simulation after signing failed')
+        if ('error' in tx.simulation) throw new Error(`Re-simulation after signing failed: ${(tx.simulation as { error: string }).error}`)
+
+        // Return the post-re-simulation XDR — correct fee + signed auth entries.
+        txXdr = tx.toXDR()
+      } catch (e) {
+        throw new Error(`[signAuth] ${(e as Error).message}`)
+      }
+
+      return { x402Version, payload: { transaction: txXdr } }
+    },
+  }
+}
+
+function formatTokenAmount(raw: bigint, decimals: number): string {
+  const scale = 10n ** BigInt(decimals)
+  const whole = raw / scale
+  const fractional = (raw % scale).toString().padStart(decimals, '0').slice(0, 2)
+  return `${whole.toString()}.${fractional}`
+}
+
+/**
+ * Fetch Soroban USDC balance for a Stellar address via the token contract.
  */
 export async function getUSDCBalance(stellarAddress: string): Promise<string> {
-  const horizon = new Horizon.Server(HORIZON_URL)
   try {
-    const account = await horizon.loadAccount(stellarAddress)
-    const usdcBalance = account.balances.find(
-      (b) =>
-        b.asset_type === 'credit_alphanum4' &&
-        b.asset_code === 'USDC' &&
-        'asset_issuer' in b &&
-        b.asset_issuer === USDC_ISSUER,
-    )
-    return usdcBalance ? parseFloat(usdcBalance.balance).toFixed(2) : '0.00'
+    const tx = await contract.AssembledTransaction.build({
+      contractId: USDC_CONTRACT,
+      method: 'balance',
+      args: [nativeToScVal(stellarAddress, { type: 'address' })],
+      networkPassphrase: NETWORK_PASSPHRASE,
+      rpcUrl: RPC_URL,
+      parseResultXdr: (result) => scValToNative(result),
+    })
+
+    const value = tx.result
+    const raw =
+      typeof value === 'bigint'
+        ? value
+        : BigInt(typeof value === 'string' ? value : String(value))
+
+    return formatTokenAmount(raw, 7)
   } catch {
     return '0.00'
+  }
+}
+
+const FAUCET_SESSION_PREFIX = 'oraclehunt_faucet_attempted:'
+
+export async function maybeSeedTestnetWallet(stellarAddress: string): Promise<boolean> {
+  if (IS_MAINNET || typeof window === 'undefined') return false
+
+  const cacheKey = `${FAUCET_SESSION_PREFIX}${stellarAddress}`
+  if (sessionStorage.getItem(cacheKey)) return false
+  sessionStorage.setItem(cacheKey, '1')
+
+  try {
+    const primary = await fetch('/api/faucet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: stellarAddress }),
+    })
+
+    if (primary.ok) return true
+
+    const fallback = await fetch(`${WORKERS_URL}/faucet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: stellarAddress }),
+    })
+
+    return fallback.ok
+  } catch {
+    return false
   }
 }
 

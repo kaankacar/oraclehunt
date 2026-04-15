@@ -1,8 +1,9 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant'
 
 export interface Env {
-  ANTHROPIC_API_KEY: string
+  GEMINI_API_KEY: string
   ORACLE_TREASURY_ADDRESS: string
+  ORACLE_TREASURY_SECRET?: string
   USDC_CONTRACT: string
   FINGERPRINT_SALT: string
   SUPABASE_URL: string
@@ -20,6 +21,7 @@ export interface OracleRequest {
 
 export interface OracleResponse {
   artifact: string
+  artifactImage?: string  // base64 data URL, present for image-generating oracles (e.g. painter)
   oracleId: OracleId | 'hidden'
   txHash?: string
   timestamp: string

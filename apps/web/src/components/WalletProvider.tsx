@@ -6,6 +6,7 @@ import {
   connectWallet,
   getUSDCBalance,
   loadWalletFromStorage,
+  maybeSeedTestnetWallet,
   saveWalletToStorage,
   truncateAddress,
   type WalletResult,
@@ -33,6 +34,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const refreshBalance = useCallback(async () => {
     if (!address) return
     const bal = await getUSDCBalance(address)
+
+    if (bal === '0.00') {
+      const funded = await maybeSeedTestnetWallet(address)
+      if (funded) {
+        const fundedBalance = await getUSDCBalance(address)
+        setBalance(fundedBalance)
+        return
+      }
+    }
+
     setBalance(bal)
   }, [address])
 
@@ -56,23 +67,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     try {
       let result: WalletResult
+      let createdNewWallet = false
 
       // Try to connect existing wallet first; create new one if none exists
       try {
         result = await connectWallet()
       } catch {
         result = await createWallet('Oracle Hunt', email)
-
-        // Register wallet in Supabase
-        const supabase = createSupabaseClient()
-        await supabase.from('wallets').upsert(
-          { email, stellar_address: result.contractId },
-          { onConflict: 'email' },
-        )
+        createdNewWallet = true
       }
+
+      // Always upsert — ensures the wallet row exists even when reconnecting
+      // (covers DB resets and wallets created before Supabase registration was added)
+      const supabase = createSupabaseClient()
+      await supabase.from('wallets').upsert(
+        { email, stellar_address: result.contractId },
+        { onConflict: 'email' },
+      )
 
       saveWalletToStorage(result.contractId, result.keyIdBase64)
       setAddress(result.contractId)
+
+      if (createdNewWallet) {
+        const funded = await maybeSeedTestnetWallet(result.contractId)
+        if (funded) {
+          const fundedBalance = await getUSDCBalance(result.contractId)
+          setBalance(fundedBalance)
+        }
+      }
     } finally {
       setIsLoading(false)
     }
