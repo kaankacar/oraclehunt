@@ -102,6 +102,14 @@ export async function connectWallet(): Promise<WalletResult> {
   return { contractId, keyIdBase64 }
 }
 
+export async function connectWalletWithOptions(
+  opts?: Parameters<PasskeyKit['connectWallet']>[0],
+): Promise<WalletResult> {
+  const kit = getPasskeyKit()
+  const { contractId, keyIdBase64 } = await kit.connectWallet(opts)
+  return { contractId, keyIdBase64 }
+}
+
 /**
  * Build an x402 ClientStellarSigner backed by passkey-kit.
  * Only used for non-payment signing; oracle payments use buildPasskeyPaymentScheme.

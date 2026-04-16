@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import {
   createWallet,
-  connectWallet,
+  connectWalletWithOptions,
   getUSDCBalance,
   loadWalletFromStorage,
   maybeSeedTestnetWallet,
@@ -11,7 +11,6 @@ import {
   truncateAddress,
   type WalletResult,
 } from '@/lib/wallet'
-import { createSupabaseClient } from '@/lib/supabase'
 
 interface WalletContextValue {
   address: string | null
@@ -63,33 +62,88 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval)
   }, [address, refreshBalance])
 
+  const lookupWalletByEmail = useCallback(async (email: string) => {
+    const response = await fetch('/api/wallet/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+
+    const json = await response.json() as {
+      wallet?: { stellarAddress: string; keyIdBase64: string | null } | null
+      error?: string
+    }
+
+    if (!response.ok) {
+      throw new Error(json.error ?? 'Failed to look up wallet')
+    }
+
+    return json.wallet ?? null
+  }, [])
+
+  const registerWallet = useCallback(async (email: string, wallet: WalletResult) => {
+    const response = await fetch('/api/wallet/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        stellarAddress: wallet.contractId,
+        keyIdBase64: wallet.keyIdBase64,
+      }),
+    })
+
+    const json = await response.json() as { error?: string }
+    if (!response.ok) {
+      throw new Error(json.error ?? 'Failed to register wallet')
+    }
+  }, [])
+
   const login = useCallback(async (email: string) => {
     setIsLoading(true)
     try {
       let result: WalletResult
       let createdNewWallet = false
+      const normalizedEmail = email.trim().toLowerCase()
+      const linkedWallet = await lookupWalletByEmail(normalizedEmail)
 
-      // If a wallet is already stored locally, reuse it — no passkey prompt needed.
-      // This prevents a new passkey/wallet from being created on every login.
       const stored = loadWalletFromStorage()
-      if (stored) {
+
+      if (linkedWallet) {
+        if (stored && stored.contractId === linkedWallet.stellarAddress) {
+          result = stored
+        } else {
+          try {
+            result = linkedWallet.keyIdBase64
+              ? await connectWalletWithOptions({
+                  keyId: linkedWallet.keyIdBase64,
+                  getContractId: async () => linkedWallet.stellarAddress,
+                })
+              : await connectWalletWithOptions({
+                  getContractId: async () => linkedWallet.stellarAddress,
+                })
+          } catch {
+            throw new Error(
+              'This email already has a wallet. Use the original passkey for that wallet instead of creating a new one.',
+            )
+          }
+        }
+      } else if (stored) {
         result = stored
       } else {
-        // No local wallet: try to connect an existing passkey, create one if none found.
         try {
-          result = await connectWallet()
-        } catch {
-          result = await createWallet('Oracle Hunt', email)
+          result = await connectWalletWithOptions()
+        } catch (error) {
+          const message = error instanceof Error ? error.message : ''
+          if (message && message !== 'Failed to connect wallet') {
+            throw error
+          }
+
+          result = await createWallet('Oracle Hunt', normalizedEmail)
           createdNewWallet = true
         }
       }
 
-      // Always upsert so the Supabase row exists regardless of how we got here.
-      const supabase = createSupabaseClient()
-      await supabase.from('wallets').upsert(
-        { email, stellar_address: result.contractId },
-        { onConflict: 'stellar_address' },
-      )
+      await registerWallet(normalizedEmail, result)
 
       saveWalletToStorage(result.contractId, result.keyIdBase64)
       setAddress(result.contractId)
@@ -104,7 +158,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [lookupWalletByEmail, registerWallet])
 
   const logout = useCallback(() => {
     setAddress(null)
