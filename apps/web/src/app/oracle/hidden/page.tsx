@@ -58,7 +58,7 @@ export default function HiddenOraclePage() {
       })
       setTrace((prev) => [...prev, ...data.processingTrace])
       setResult(data)
-    } catch (err) {
+      } catch (err) {
       if (err instanceof Error && err.message === 'INVALID_PASSPHRASE') {
         setError('The Oracle does not recognize your phrase. Seek deeper.')
       } else {
@@ -70,13 +70,13 @@ export default function HiddenOraclePage() {
   }
 
   const consultation = result
-    ? ({
+      ? ({
         id: `hidden:${result.timestamp}`,
         wallet_id: '',
         oracle_id: 'hidden',
         prompt: '[ZK Portrait Request] Passphrase accepted.',
         artifact_text: result.zkPortrait,
-        artifact_image: null,
+        artifact_image: result.artifactImage ?? null,
         tx_hash: result.txHash ?? null,
         processing_trace: trace.length ? trace : result.processingTrace,
         fingerprint: result.fingerprint,
@@ -97,7 +97,7 @@ export default function HiddenOraclePage() {
         <div className="text-6xl mb-4">🗝️</div>
         <h1 className="text-3xl font-bold text-navy mb-2">The Hidden Oracle</h1>
         <p className="text-navy/60 text-sm leading-relaxed max-w-sm mx-auto">
-          This Oracle derives a Soroban fingerprint, verifies it, and only then speaks.
+          This Oracle derives a Soroban fingerprint, verifies it, and only then renders.
         </p>
       </div>
 

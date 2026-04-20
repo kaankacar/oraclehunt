@@ -80,7 +80,7 @@ const mockEnv = {
   SUPABASE_URL: 'https://test.supabase.co',
   SUPABASE_SERVICE_KEY: 'test-service-key',
   ZK_CONTRACT_ID: 'PLACEHOLDER',
-  INFORMANT_PASSPHRASE: 'ZEROPHASE',
+  INFORMANT_PASSPHRASE: 'LIQUIDITY',
   STELLAR_NETWORK: 'pubnet',
 }
 
@@ -204,7 +204,7 @@ describe('x402 payment middleware', () => {
     const req = new Request('http://localhost/oracle/hidden', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress: 'GTEST', passphrase: 'ZEROPHASE' }),
+      body: JSON.stringify({ walletAddress: 'GTEST', passphrase: 'LIQUIDITY' }),
     })
 
     const res = await app.fetch(req, mockEnv)

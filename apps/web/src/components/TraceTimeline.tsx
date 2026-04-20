@@ -69,9 +69,19 @@ export function TraceTimeline({
 
       {isExpanded && (
         <div className="mt-4 space-y-3">
-          {steps.map((step) => (
-            <div key={step.id} className="flex gap-3 items-start">
-              <div className={`mt-0.5 text-xs ${statusClass(step.status)}`}>
+          {steps.map((step, index) => (
+            <div
+              key={step.id}
+              className="trace-step flex gap-3 items-start"
+              style={{ animationDelay: `${index * 70}ms` }}
+            >
+              <div className={`trace-glyph mt-0.5 text-xs ${statusClass(step.status)} ${
+                step.status === 'pending'
+                  ? 'trace-glyph-pending'
+                  : step.status === 'success'
+                    ? 'trace-glyph-success'
+                    : 'trace-glyph-error'
+              }`}>
                 {statusGlyph(step.status)}
               </div>
               <div className="min-w-0">

@@ -6,5 +6,5 @@ FINGERPRINT_SALT=your-random-secret-string
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=your-service-role-key
 ZK_CONTRACT_ID=PLACEHOLDER
-INFORMANT_PASSPHRASE=ZEROPHASE
+INFORMANT_PASSPHRASE=LIQUIDITY
 ADMIN_CORS_ORIGIN=https://your-next-app.vercel.app

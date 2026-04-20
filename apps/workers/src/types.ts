@@ -32,6 +32,7 @@ export interface OracleResponse {
 export interface HiddenOracleResponse {
   fingerprint: string
   zkPortrait: string
+  artifactImage?: string
   txHash?: string
   explorerUrl?: string
   contractExplorerUrl?: string

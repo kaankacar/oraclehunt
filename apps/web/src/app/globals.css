@@ -46,6 +46,68 @@ body {
   border: 1px solid rgba(75, 123, 245, 0.3);
 }
 
+@keyframes traceStepIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tracePulse {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes traceSuccessPop {
+  0% {
+    opacity: 0.2;
+    transform: scale(0.65);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.trace-step {
+  animation: traceStepIn 0.32s ease both;
+}
+
+.trace-glyph {
+  display: inline-block;
+  transform-origin: center;
+}
+
+.trace-glyph-pending {
+  animation: tracePulse 1.4s ease-in-out infinite;
+}
+
+.trace-glyph-success {
+  animation: traceSuccessPop 0.28s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-step,
+  .trace-glyph-pending,
+  .trace-glyph-success {
+    animation: none;
+  }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--light-blue); }
