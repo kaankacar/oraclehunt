@@ -17,12 +17,14 @@ interface LeaderEntry {
 export default function LeaderboardPage() {
   const [byCompletion, setByCompletion] = useState<LeaderEntry[]>([])
   const [byVotes, setByVotes] = useState<LeaderEntry[]>([])
+  const [allEntries, setAllEntries] = useState<LeaderEntry[]>([])
   const [lastUpdated, setLastUpdated] = useState(new Date())
 
   async function load() {
     const data = await getLeaderboard()
     setByCompletion(data.byCompletion as LeaderEntry[])
     setByVotes(data.byVotes as LeaderEntry[])
+    setAllEntries(data.allEntries as LeaderEntry[])
     setLastUpdated(new Date())
   }
 
@@ -109,15 +111,37 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      {/* Company-wide win tracker */}
-      <div className="mt-12 bg-navy rounded-2xl p-6 text-center">
-        <p className="text-white/60 text-sm mb-2">Company-Wide Goal</p>
-        <p className="text-white font-bold text-lg mb-1">
-          100% of SDF employees complete their Codex
-        </p>
-        <p className="text-accent-light text-sm">
-          If everyone finishes before end of retreat — everyone wins.
-        </p>
+      <div className="mt-12">
+        <h2 className="text-lg font-bold text-navy mb-4">All Seekers</h2>
+        <div className="bg-white rounded-2xl border border-accent/10 overflow-hidden">
+          <div className="grid grid-cols-[56px_1fr_100px_90px] px-4 py-3 text-xs uppercase tracking-wide text-navy/40 border-b border-accent/10">
+            <span>Rank</span>
+            <span>Seeker</span>
+            <span>Oracles</span>
+            <span>Votes</span>
+          </div>
+          {allEntries.length === 0 ? (
+            <div className="px-4 py-8 text-sm text-navy/40 text-center">No entries yet.</div>
+          ) : (
+            allEntries.map((entry, i) => (
+              <Link
+                key={`all:${entry.stellar_address}`}
+                href={`/codex/${entry.stellar_address}`}
+                className="grid grid-cols-[56px_1fr_100px_90px] items-center px-4 py-3 text-sm border-b last:border-b-0 border-accent/5 hover:bg-light-blue/60 transition-colors"
+              >
+                <span className="font-mono text-navy/40">{i + 1}</span>
+                <div className="min-w-0">
+                  <p className="font-semibold text-navy truncate">{displayName(entry)}</p>
+                  <p className="text-xs text-navy/35 font-mono truncate">
+                    {truncateAddress(entry.stellar_address)}
+                  </p>
+                </div>
+                <span className="font-mono text-accent">{entry.oracles_consulted}/5</span>
+                <span className="font-mono text-navy/60">★ {entry.vote_count}</span>
+              </Link>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )

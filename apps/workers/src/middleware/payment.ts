@@ -134,6 +134,9 @@ class LocalFacilitator {
       }
 
       const op = transaction.operations[0]
+      if (!op) {
+        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_operation' }
+      }
       if (op.type !== 'invokeHostFunction') {
         return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_operation' }
       }
@@ -231,7 +234,7 @@ class LocalFacilitator {
         fee: maxFee.toString(),
         networkPassphrase: passphrase,
         sorobanData: sorobanDataXdr,
-      } as Parameters<typeof TransactionBuilder>[1])
+      } as ConstructorParameters<typeof TransactionBuilder>[1])
         .setTimeout(requirements.maxTimeoutSeconds ?? 60)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .addOperation(Operation.invokeHostFunction(invokeOp as any))
@@ -290,6 +293,10 @@ class LocalFacilitator {
 
 export function buildResourceServer(env: Env): x402ResourceServer {
   const network = stellarNetwork(env)
+  if (!env.ORACLE_TREASURY_SECRET) {
+    throw new Error('Missing ORACLE_TREASURY_SECRET')
+  }
+
   const localFacilitator = new LocalFacilitator(env.ORACLE_TREASURY_ADDRESS, env.ORACLE_TREASURY_SECRET, network)
 
   return (new x402ResourceServer(localFacilitator as never)).register(

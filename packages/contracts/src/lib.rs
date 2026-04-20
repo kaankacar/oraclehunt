@@ -16,7 +16,10 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Vec};
+use soroban_poseidon::poseidon2_hash;
+use soroban_sdk::{
+    contract, contractimpl, crypto::BnScalar, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, U256,
+};
 
 #[contract]
 pub struct ZkFingerprintContract;
@@ -37,16 +40,12 @@ impl ZkFingerprintContract {
 
         // Build input vector: [wallet_bytes_as_field_element, salt_as_field_element]
         // Poseidon over BN254 Fr scalar field (32-byte field elements)
-        let mut inputs: Vec<BytesN<32>> = Vec::new(&env);
-
-        // Pad/hash wallet bytes to fit BN254 Fr field element (32 bytes, big-endian)
         let wallet_field = bytes_to_field_element(&env, &wallet_bytes);
-        inputs.push_back(wallet_field);
-        inputs.push_back(salt);
+        let salt_field = BnScalar::from_u256(U256::from_be_bytes(&env, &salt.to_bytes())).to_u256();
 
-        // Call Protocol 25 Poseidon host function
-        // env.crypto().poseidon2() uses Poseidon2 permutation over BN254
-        env.crypto().poseidon2(&inputs)
+        let inputs = vec![&env, wallet_field, salt_field];
+        let hash = poseidon2_hash::<3, BnScalar>(&env, &inputs);
+        hash.to_be_bytes().try_into().unwrap()
     }
 
     /// Verify that a claimed fingerprint matches the on-chain derivation.
@@ -74,17 +73,10 @@ impl ZkFingerprintContract {
 /// Strategy: SHA-256 the input, then mask the top byte to ensure
 /// the result is < BN254 field prime (2^254 < p < 2^255).
 /// This is standard practice for mapping arbitrary data into BN254 Fr.
-fn bytes_to_field_element(env: &Env, input: &Bytes) -> BytesN<32> {
+fn bytes_to_field_element(env: &Env, input: &Bytes) -> U256 {
     // Hash to 32 bytes
-    let hash: BytesN<32> = env.crypto().sha256(input);
-
-    // Mask the most significant byte to keep value in BN254 Fr range
-    // BN254 Fr prime starts with 0x30... so masking top bit with 0x1F is safe
-    let mut raw = [0u8; 32];
-    hash.copy_into_slice(&mut raw);
-    raw[0] &= 0x1F;
-
-    BytesN::from_array(env, &raw)
+    let hash: BytesN<32> = env.crypto().sha256(input).into();
+    BnScalar::from_u256(U256::from_be_bytes(env, &hash.to_bytes())).to_u256()
 }
 
 #[cfg(test)]
@@ -96,7 +88,7 @@ mod tests {
     #[test]
     fn test_fingerprint_is_deterministic() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, ZkFingerprintContract);
+        let contract_id = env.register(ZkFingerprintContract, ());
         let client = ZkFingerprintContractClient::new(&env, &contract_id);
 
         let wallet = Address::generate(&env);
@@ -111,7 +103,7 @@ mod tests {
     #[test]
     fn test_different_wallets_produce_different_fingerprints() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, ZkFingerprintContract);
+        let contract_id = env.register(ZkFingerprintContract, ());
         let client = ZkFingerprintContractClient::new(&env, &contract_id);
 
         let wallet_a = Address::generate(&env);
@@ -127,7 +119,7 @@ mod tests {
     #[test]
     fn test_different_salts_produce_different_fingerprints() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, ZkFingerprintContract);
+        let contract_id = env.register(ZkFingerprintContract, ());
         let client = ZkFingerprintContractClient::new(&env, &contract_id);
 
         let wallet = Address::generate(&env);
@@ -143,7 +135,7 @@ mod tests {
     #[test]
     fn test_verify_fingerprint_correct() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, ZkFingerprintContract);
+        let contract_id = env.register(ZkFingerprintContract, ());
         let client = ZkFingerprintContractClient::new(&env, &contract_id);
 
         let wallet = Address::generate(&env);
@@ -158,7 +150,7 @@ mod tests {
     #[test]
     fn test_verify_fingerprint_wrong_value() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, ZkFingerprintContract);
+        let contract_id = env.register(ZkFingerprintContract, ());
         let client = ZkFingerprintContractClient::new(&env, &contract_id);
 
         let wallet = Address::generate(&env);

@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createSupabaseClient } from '@/lib/supabase'
 
 interface WalletRow {
   id: string
-  email: string
+  username: string | null
   stellar_address: string
 }
 
@@ -23,55 +22,86 @@ export default function AdminRevealPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState('')
 
-  const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD ?? ''
-
   function handleLogin() {
-    if (password === ADMIN_PASSWORD) {
-      setIsAuthed(true)
-    } else {
-      setMessage('Incorrect password.')
-    }
+    setIsLoading(true)
+    fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+      .then(async (response) => {
+        const json = await response.json() as { error?: string }
+        if (!response.ok) {
+          setMessage(json.error ?? 'Incorrect password.')
+          return
+        }
+        setIsAuthed(true)
+        setMessage('')
+      })
+      .finally(() => setIsLoading(false))
   }
+
+  useEffect(() => {
+    fetch('/api/admin/status')
+      .then(async (response) => {
+        const json = await response.json() as { authenticated?: boolean }
+        if (json.authenticated) {
+          setIsAuthed(true)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!isAuthed) return
 
-    const supabase = createSupabaseClient()
+    setIsLoading(true)
+    fetch('/api/admin/reveal')
+      .then(async (response) => {
+        const json = await response.json() as {
+          wallets?: WalletRow[]
+          reveals?: RevealRow[]
+          error?: string
+        }
+        if (!response.ok) {
+          setMessage(json.error ?? 'Failed to load reveal state.')
+          return
+        }
 
-    Promise.all([
-      supabase.from('wallets').select('id, email, stellar_address').order('created_at'),
-      supabase.from('reveal_mapping').select('wallet_address, display_name'),
-    ]).then(([{ data: w }, { data: r }]) => {
-      setWallets((w ?? []) as WalletRow[])
-      const existingReveals = (r ?? []) as RevealRow[]
-      setReveals(existingReveals)
-      setIsRevealed(existingReveals.length > 0)
-    })
+        const nextWallets = json.wallets ?? []
+        const nextReveals = json.reveals ?? []
+        setWallets(nextWallets)
+        setReveals(nextReveals)
+        setIsRevealed(nextReveals.length > 0)
+      })
+      .finally(() => setIsLoading(false))
   }, [isAuthed])
 
   async function executeReveal() {
     if (isRevealed) return
     setIsLoading(true)
+    try {
+      const response = await fetch('/api/admin/reveal', { method: 'POST' })
+      const json = await response.json() as {
+        ok?: boolean
+        wallets?: WalletRow[]
+        reveals?: RevealRow[]
+        message?: string
+        error?: string
+      }
 
-    const supabase = createSupabaseClient()
+      if (!response.ok) {
+        setMessage(`Reveal failed: ${json.error ?? 'Unknown error'}`)
+        return
+      }
 
-    // Insert wallet_address → email display name mappings
-    const rows = wallets.map((w) => ({
-      wallet_address: w.stellar_address,
-      display_name: w.email.split('@')[0] ?? w.email,
-    }))
-
-    const { error } = await supabase.from('reveal_mapping').insert(rows)
-
-    if (error) {
-      setMessage(`Reveal failed: ${error.message}`)
-    } else {
-      setIsRevealed(true)
-      setReveals(rows)
-      setMessage(`✓ Reveal complete. ${rows.length} names now visible in the gallery.`)
+      setWallets(json.wallets ?? wallets)
+      setReveals(json.reveals ?? [])
+      setIsRevealed((json.reveals ?? []).length > 0)
+      setMessage(`✓ ${json.message ?? 'Reveal complete.'}`)
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   if (!isAuthed) {
@@ -89,9 +119,10 @@ export default function AdminRevealPage() {
         {message && <p className="text-red-500 text-xs mb-3">{message}</p>}
         <button
           onClick={handleLogin}
+          disabled={isLoading}
           className="w-full bg-navy text-white py-3 rounded-lg hover:bg-navy/90 transition-colors"
         >
-          Login
+          {isLoading ? 'Logging in…' : 'Login'}
         </button>
       </div>
     )
@@ -101,7 +132,7 @@ export default function AdminRevealPage() {
     <div className="max-w-4xl mx-auto px-4 py-12">
       <h1 className="text-2xl font-bold text-navy mb-2">Admin — Gallery Reveal</h1>
       <p className="text-navy/60 text-sm mb-8">
-        When you execute the reveal, wallet addresses in the gallery will be replaced with participant names.
+        When you execute the reveal, wallet addresses in the gallery will be replaced with the registered public usernames.
         <strong className="text-red-600"> This action is irreversible.</strong>
       </p>
 
@@ -113,7 +144,7 @@ export default function AdminRevealPage() {
         <div className="divide-y divide-navy/5 max-h-80 overflow-y-auto">
           {wallets.map((w) => (
             <div key={w.id} className="flex items-center gap-4 px-4 py-3 text-sm">
-              <span className="text-navy/60 w-48 truncate">{w.email}</span>
+              <span className="text-navy/60 w-48 truncate">{w.username ?? '(no username yet)'}</span>
               <span className="font-mono text-navy/40 text-xs truncate flex-1">{w.stellar_address}</span>
               {reveals.find((r) => r.wallet_address === w.stellar_address) && (
                 <span className="text-green-600 text-xs">✓ Revealed</span>
@@ -134,7 +165,7 @@ export default function AdminRevealPage() {
       {isRevealed ? (
         <div className="text-center py-6">
           <p className="text-green-600 font-semibold text-lg">✓ Gallery has been revealed</p>
-          <p className="text-navy/50 text-sm mt-1">Participant names are now visible to everyone.</p>
+          <p className="text-navy/50 text-sm mt-1">Registered usernames are now visible to everyone.</p>
         </div>
       ) : (
         <div className="text-center">

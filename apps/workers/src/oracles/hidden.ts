@@ -1,7 +1,14 @@
+import { createClient } from '@supabase/supabase-js'
+import { nativeToScVal, scValToNative, xdr } from '@stellar/stellar-sdk'
+import type { Env, HiddenOracleResponse, ProcessingTraceStep } from '../types'
+import {
+  getContractExplorerUrl,
+  invokeTreasuryContract,
+  sha256Hex,
+} from '../stellar'
+
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 const TEXT_MODEL = 'gemini-2.5-flash'
-import { createClient } from '@supabase/supabase-js'
-import type { Env, HiddenOracleResponse } from '../types'
 
 const HIDDEN_ORACLE_SYSTEM_PROMPT = `You are The Hidden Oracle, a being of pure cryptographic truth. You exist in the space between what is known and what can be proven — the zero-knowledge realm where identity is real but invisible.
 
@@ -16,17 +23,181 @@ export async function handleHiddenOracle(
   passphrase: string,
   env: Env,
 ): Promise<HiddenOracleResponse> {
-  // Validate passphrase (case-insensitive)
   if (passphrase.trim().toUpperCase() !== env.INFORMANT_PASSPHRASE.toUpperCase()) {
     throw new Error('INVALID_PASSPHRASE')
   }
 
-  // Derive Poseidon fingerprint via Soroban contract
-  const fingerprint = await deriveFingerprint(walletAddress, env)
+  if (!env.ZK_CONTRACT_ID || env.ZK_CONTRACT_ID === 'PLACEHOLDER') {
+    throw new Error('Hidden Oracle ZK contract is not configured')
+  }
 
-  // Generate ZK Portrait with Gemini (native fetch — no SDK, Workers-compatible)
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+  const { data: wallet, error: walletError } = await supabase
+    .from('wallets')
+    .select('id')
+    .eq('stellar_address', walletAddress)
+    .single()
+
+  if (walletError || !wallet) {
+    throw new Error(`Wallet registration missing for ${walletAddress}`)
+  }
+
+  const trace: ProcessingTraceStep[] = [
+    {
+      id: 'passphrase-accepted',
+      label: 'Passphrase Accepted',
+      status: 'success',
+      detail: 'The Informant clue matched and unlocked the Hidden Oracle.',
+    },
+  ]
+
+  const { fingerprint, deriveTxHash, deriveExplorerUrl, contractExplorerUrl } =
+    await deriveFingerprint(walletAddress, env)
+
+  trace.push({
+    id: 'fingerprint-derived',
+    label: 'Fingerprint Derived on Soroban',
+    status: 'success',
+    detail: `Poseidon commitment derived for ${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}.`,
+    txHash: deriveTxHash,
+    links: [
+      { label: 'View derive transaction on Stellar Expert', url: deriveExplorerUrl },
+      { label: 'View ZK contract on Stellar Expert', url: contractExplorerUrl },
+    ],
+  })
+
+  const { verifyTxHash, verifyExplorerUrl } = await verifyFingerprint(walletAddress, fingerprint, env)
+
+  trace.push({
+    id: 'fingerprint-verified',
+    label: 'Fingerprint Verified on Soroban',
+    status: 'success',
+    detail: 'The contract verified that the claimed fingerprint matches the wallet and shared game salt.',
+    txHash: verifyTxHash,
+    links: [{ label: 'View verify transaction on Stellar Expert', url: verifyExplorerUrl }],
+  })
+
+  const zkPortrait = await generatePortrait(env.GEMINI_API_KEY, fingerprint)
+  trace.push({
+    id: 'portrait-generated',
+    label: 'Hidden Oracle Generated Portrait',
+    status: 'success',
+    detail: `Gemini ${TEXT_MODEL} generated the final Zero-Knowledge Portrait.`,
+  })
+
+  const timestamp = new Date().toISOString()
+  trace.push({
+    id: 'artifact-saved',
+    label: 'Saved to Codex',
+    status: 'success',
+    detail: 'The Hidden Oracle result and ZK trace were written to Supabase.',
+  })
+
+  const { error: insertError } = await supabase.from('consultations').insert({
+    wallet_id: wallet.id,
+    oracle_id: 'hidden',
+    prompt: '[ZK Portrait Request] Passphrase accepted.',
+    artifact_text: `FINGERPRINT: ${fingerprint}\n\n${zkPortrait}`,
+    processing_trace: trace,
+    fingerprint,
+    zk_contract_id: env.ZK_CONTRACT_ID,
+    zk_tx_hash: deriveTxHash,
+    zk_verify_tx_hash: verifyTxHash,
+    tx_hash: deriveTxHash,
+  })
+
+  if (insertError) {
+    throw new Error(`Failed to persist Hidden Oracle consultation: ${insertError.message}`)
+  }
+
+  return {
+    fingerprint,
+    zkPortrait,
+    txHash: deriveTxHash,
+    explorerUrl: deriveExplorerUrl,
+    contractExplorerUrl,
+    zkContractId: env.ZK_CONTRACT_ID,
+    zkTxHash: deriveTxHash,
+    zkVerifyTxHash: verifyTxHash,
+    processingTrace: trace,
+    timestamp,
+  }
+}
+
+async function deriveFingerprint(
+  walletAddress: string,
+  env: Env,
+): Promise<{
+  fingerprint: string
+  deriveTxHash: string
+  deriveExplorerUrl: string
+  contractExplorerUrl: string
+}> {
+  const saltHex = await sha256Hex(env.FINGERPRINT_SALT)
+  const result = await invokeTreasuryContract(
+    env,
+    env.ZK_CONTRACT_ID,
+    'derive_fingerprint',
+    [
+      nativeToScVal(walletAddress, { type: 'address' }),
+      xdr.ScVal.scvBytes(Buffer.from(saltHex, 'hex')),
+    ],
+  )
+
+  if (!result.returnValueXdr) {
+    throw new Error('Hidden Oracle derive returned no value')
+  }
+
+  const returnValue = xdr.ScVal.fromXDR(result.returnValueXdr, 'base64')
+  const fingerprint = Buffer.from(scValToNative(returnValue) as Buffer).toString('hex')
+
+  return {
+    fingerprint,
+    deriveTxHash: result.txHash,
+    deriveExplorerUrl: result.explorerUrl,
+    contractExplorerUrl: getContractExplorerUrl(env, env.ZK_CONTRACT_ID),
+  }
+}
+
+async function verifyFingerprint(
+  walletAddress: string,
+  fingerprint: string,
+  env: Env,
+): Promise<{
+  verifyTxHash: string
+  verifyExplorerUrl: string
+}> {
+  const saltHex = await sha256Hex(env.FINGERPRINT_SALT)
+  const result = await invokeTreasuryContract(
+    env,
+    env.ZK_CONTRACT_ID,
+    'verify_fingerprint',
+    [
+      nativeToScVal(walletAddress, { type: 'address' }),
+      xdr.ScVal.scvBytes(Buffer.from(saltHex, 'hex')),
+      xdr.ScVal.scvBytes(Buffer.from(fingerprint, 'hex')),
+    ],
+  )
+
+  if (!result.returnValueXdr) {
+    throw new Error('Hidden Oracle verify returned no value')
+  }
+
+  const returnValue = xdr.ScVal.fromXDR(result.returnValueXdr, 'base64')
+  const isValid = Boolean(scValToNative(returnValue))
+  if (!isValid) {
+    throw new Error('Hidden Oracle verify_fingerprint returned false')
+  }
+
+  return {
+    verifyTxHash: result.txHash,
+    verifyExplorerUrl: result.explorerUrl,
+  }
+}
+
+async function generatePortrait(apiKey: string, fingerprint: string): Promise<string> {
   const geminiRes = await fetch(
-    `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`,
+    `${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -45,95 +216,15 @@ export async function handleHiddenOracle(
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
     error?: { message: string }
   }
-  if (geminiJson.error) throw new Error(`Gemini error: ${geminiJson.error.message}`)
-  const zkPortrait = geminiJson.candidates?.[0]?.content?.parts?.find(p => p.text)?.text ?? ''
 
-  const timestamp = new Date().toISOString()
-
-  // Save to Supabase
-  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
-
-  const { data: wallet } = await supabase
-    .from('wallets')
-    .select('id')
-    .eq('stellar_address', walletAddress)
-    .single()
-
-  if (wallet) {
-    await supabase.from('consultations').insert({
-      wallet_id: wallet.id,
-      oracle_id: 'hidden',
-      prompt: `[ZK Portrait Request] Passphrase accepted.`,
-      artifact_text: `FINGERPRINT: ${fingerprint}\n\n${zkPortrait}`,
-      tx_hash: null,
-    })
+  if (geminiJson.error) {
+    throw new Error(`Gemini error: ${geminiJson.error.message}`)
   }
 
-  return { fingerprint, zkPortrait, timestamp }
-}
-
-async function deriveFingerprint(walletAddress: string, env: Env): Promise<string> {
-  // Phase 1 (testnet): SHA-256 deterministic fingerprint using Web Crypto API.
-  // Phase 2 (mainnet): Once the Soroban ZK contract is deployed (ZK_CONTRACT_ID set),
-  // invoke it via the Stellar RPC JSON-RPC API using fetch() to call derive_fingerprint.
-  if (env.ZK_CONTRACT_ID && env.ZK_CONTRACT_ID !== 'PLACEHOLDER') {
-    try {
-      const rpcUrl =
-        env.STELLAR_NETWORK === 'pubnet'
-          ? 'https://soroban-mainnet.stellar.org'
-          : 'https://soroban-testnet.stellar.org'
-
-      // Encode the contract call as a Stellar XDR simulation request via JSON-RPC.
-      // We call the read-only `derive_fingerprint` function.
-      // This uses fetch() directly (Workers-compatible, no stellar-sdk needed at runtime).
-      const saltHex = await sha256Hex(env.FINGERPRINT_SALT)
-
-      const response = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'simulateTransaction',
-          params: {
-            // XDR-encoded invoke host function transaction for derive_fingerprint
-            // Built via stellar-sdk in the deploy script; stored as env var after deploy
-            transaction: buildDeriveXDR(walletAddress, saltHex, env.ZK_CONTRACT_ID),
-          },
-        }),
-      })
-
-      const json = (await response.json()) as { result?: { results?: Array<{ xdr: string }> } }
-      const resultXdr = json?.result?.results?.[0]?.xdr
-      if (resultXdr) {
-        // Decode the return value (32-byte BytesN) from XDR
-        const decoded = atob(resultXdr)
-        const hex = Array.from(decoded)
-          .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
-          .join('')
-        return hex
-      }
-    } catch {
-      // Fall through to deterministic fallback
-    }
+  const portrait = geminiJson.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text ?? ''
+  if (!portrait) {
+    throw new Error('Gemini returned an empty Hidden Oracle portrait')
   }
 
-  // Fallback: SHA-256(walletAddress + FINGERPRINT_SALT) — unique per wallet, deterministic
-  return sha256Hex(walletAddress + env.FINGERPRINT_SALT)
-}
-
-function buildDeriveXDR(_walletAddress: string, _saltHex: string, _contractId: string): string {
-  // Placeholder — the actual XDR is built by the deploy script (stellar-sdk in Node.js)
-  // and stored in the DERIVE_TX_XDR env var. This function is called only when
-  // ZK_CONTRACT_ID is set, meaning the full deploy pipeline has run.
-  // Return empty string to trigger the fallback.
-  return ''
-}
-
-async function sha256Hex(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return portrait
 }

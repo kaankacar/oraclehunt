@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import type { OracleId } from '@/types'
 
 export function createSupabaseClient() {
   return createClient(
@@ -7,15 +8,21 @@ export function createSupabaseClient() {
   )
 }
 
+async function getPublicWalletRecord(stellarAddress: string) {
+  const supabase = createSupabaseClient()
+  const { data } = await supabase
+    .from('wallet_profiles_public')
+    .select('id, username')
+    .eq('stellar_address', stellarAddress)
+    .maybeSingle()
+
+  return data ?? null
+}
+
 /** Fetch all consultations for a wallet address, ordered by most recent. */
 export async function getCodex(stellarAddress: string) {
   const supabase = createSupabaseClient()
-
-  const { data: wallet } = await supabase
-    .from('wallets')
-    .select('id')
-    .eq('stellar_address', stellarAddress)
-    .single()
+  const wallet = await getPublicWalletRecord(stellarAddress)
 
   if (!wallet) return []
 
@@ -24,6 +31,23 @@ export async function getCodex(stellarAddress: string) {
     .select('*')
     .eq('wallet_id', wallet.id)
     .order('created_at', { ascending: false })
+
+  return data ?? []
+}
+
+export async function getOracleHistory(stellarAddress: string, oracleId: OracleId) {
+  const supabase = createSupabaseClient()
+  const wallet = await getPublicWalletRecord(stellarAddress)
+
+  if (!wallet) return []
+
+  const { data } = await supabase
+    .from('consultations')
+    .select('*')
+    .eq('wallet_id', wallet.id)
+    .eq('oracle_id', oracleId)
+    .order('created_at', { ascending: false })
+    .limit(12)
 
   return data ?? []
 }
@@ -37,12 +61,7 @@ export async function getConsultedOracles(stellarAddress: string): Promise<Set<s
 /** Get vote count for a wallet's Codex. */
 export async function getVoteCount(stellarAddress: string): Promise<number> {
   const supabase = createSupabaseClient()
-
-  const { data: wallet } = await supabase
-    .from('wallets')
-    .select('id')
-    .eq('stellar_address', stellarAddress)
-    .single()
+  const wallet = await getPublicWalletRecord(stellarAddress)
 
   if (!wallet) return 0
 
@@ -62,8 +81,8 @@ export async function castVote(
   const supabase = createSupabaseClient()
 
   const [{ data: voter }, { data: target }] = await Promise.all([
-    supabase.from('wallets').select('id').eq('stellar_address', voterAddress).single(),
-    supabase.from('wallets').select('id').eq('stellar_address', targetAddress).single(),
+    supabase.from('wallet_profiles_public').select('id').eq('stellar_address', voterAddress).single(),
+    supabase.from('wallet_profiles_public').select('id').eq('stellar_address', targetAddress).single(),
   ])
 
   if (!voter || !target) {
@@ -98,26 +117,59 @@ export async function getGallery() {
   return data ?? []
 }
 
+/** Fetch individual public artifacts for the gallery feed. */
+export async function getGalleryArtifacts() {
+  const supabase = createSupabaseClient()
+
+  const { data } = await supabase
+    .from('gallery_artifacts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(300)
+
+  return data ?? []
+}
+
+export async function getPublicDisplayName(stellarAddress: string): Promise<string | null> {
+  const supabase = createSupabaseClient()
+  const { data: leaderboardEntry } = await supabase
+    .from('leaderboard')
+    .select('display_name')
+    .eq('stellar_address', stellarAddress)
+    .maybeSingle()
+
+  if (leaderboardEntry?.display_name) {
+    return leaderboardEntry.display_name
+  }
+
+  const wallet = await getPublicWalletRecord(stellarAddress)
+  return wallet?.username ?? null
+}
+
 /** Fetch leaderboard: top by oracles_consulted, top by votes. */
 export async function getLeaderboard() {
   const supabase = createSupabaseClient()
 
-  const [byCompletion, byVotes] = await Promise.all([
-    supabase
-      .from('leaderboard')
-      .select('*')
-      .order('oracles_consulted', { ascending: false })
-      .order('completed_at', { ascending: true, nullsFirst: false })
-      .limit(10),
-    supabase
-      .from('leaderboard')
-      .select('*')
-      .order('vote_count', { ascending: false })
-      .limit(10),
-  ])
+  const { data } = await supabase
+    .from('leaderboard')
+    .select('*')
+    .order('oracles_consulted', { ascending: false })
+    .order('completed_at', { ascending: true, nullsFirst: false })
+    .order('vote_count', { ascending: false })
+
+  const allEntries = data ?? []
+  const byCompletion = allEntries.slice(0, 10)
+  const byVotes = [...allEntries]
+    .sort((a, b) => {
+      if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count
+      if (b.oracles_consulted !== a.oracles_consulted) return b.oracles_consulted - a.oracles_consulted
+      return a.stellar_address.localeCompare(b.stellar_address)
+    })
+    .slice(0, 10)
 
   return {
-    byCompletion: byCompletion.data ?? [],
-    byVotes: byVotes.data ?? [],
+    byCompletion,
+    byVotes,
+    allEntries,
   }
 }

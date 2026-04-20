@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useWallet } from './WalletProvider'
 
 export function Nav() {
-  const { displayAddress, balance, isConnected, logout } = useWallet()
+  const { address, displayAddress, balance, username, isConnected, logout } = useWallet()
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-navy border-b border-accent/30">
@@ -23,15 +23,22 @@ export function Nav() {
           <Link href="/leaderboard" className="text-white/80 hover:text-white text-sm transition-colors">
             Leaderboard
           </Link>
+          {isConnected && address && (
+            <Link href={`/codex/${address}`} className="text-white/80 hover:text-white text-sm transition-colors">
+              My Codex
+            </Link>
+          )}
 
           {isConnected ? (
             <div className="flex items-center gap-3">
-              <Link
-                href={`/codex/${displayAddress}`}
-                className="text-xs font-mono text-accent-light hover:text-white transition-colors"
-              >
+              {username && (
+                <span className="text-xs text-white/70">
+                  @{username}
+                </span>
+              )}
+              <span className="text-xs font-mono text-accent-light">
                 {displayAddress}
-              </Link>
+              </span>
               {balance !== null && (
                 <span className="bg-accent/20 text-accent-light text-xs font-mono px-2 py-1 rounded">
                   ${balance} USDC

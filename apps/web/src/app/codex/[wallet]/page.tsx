@@ -4,19 +4,10 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ORACLES, type Consultation } from '@/types'
-import { getCodex } from '@/lib/supabase'
+import { getCodex, getPublicDisplayName } from '@/lib/supabase'
 import { truncateAddress } from '@/lib/wallet'
 import { useWallet } from '@/components/WalletProvider'
-
-const ORACLE_EMOJI: Record<string, string> = {
-  seer: '🔮', painter: '🎨', composer: '🎵',
-  scribe: '📜', scholar: '📚', informant: '🕵️', hidden: '🗝️',
-}
-
-const ORACLE_NAME: Record<string, string> = {
-  seer: 'The Seer', painter: 'The Painter', composer: 'The Composer',
-  scribe: 'The Scribe', scholar: 'The Scholar', informant: 'The Informant', hidden: 'The Hidden Oracle',
-}
+import { ArtifactCard } from '@/components/ArtifactCard'
 
 export default function CodexPage() {
   const params = useParams()
@@ -24,14 +15,18 @@ export default function CodexPage() {
   const { address: myAddress } = useWallet()
 
   const [consultations, setConsultations] = useState<Consultation[]>([])
+  const [displayName, setDisplayName] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
   const isOwner = myAddress === walletParam
 
   useEffect(() => {
-    getCodex(walletParam)
-      .then((data) => setConsultations(data as Consultation[]))
+    Promise.all([getCodex(walletParam), getPublicDisplayName(walletParam)])
+      .then(([codex, name]) => {
+        setConsultations(codex as Consultation[])
+        setDisplayName(name)
+      })
       .finally(() => setIsLoading(false))
   }, [walletParam])
 
@@ -58,7 +53,7 @@ export default function CodexPage() {
       <div className="flex items-start justify-between mb-8 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy mb-1">
-            {isOwner ? 'My Codex' : 'Oracle Codex'}
+            {isOwner ? 'My Codex' : displayName ? `${displayName}'s Codex` : 'Oracle Codex'}
           </h1>
           <p className="font-mono text-navy/40 text-sm">{truncateAddress(walletParam)}</p>
         </div>
@@ -122,21 +117,7 @@ export default function CodexPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {consultations.map((c) => (
-            <div key={c.id} className={`artifact-card p-5 shadow-sm ${c.oracle_id === 'hidden' ? 'border-l-navy' : ''}`}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-base">{ORACLE_EMOJI[c.oracle_id] ?? '✦'}</span>
-                <span className="text-xs font-semibold text-accent uppercase tracking-wide">
-                  {ORACLE_NAME[c.oracle_id] ?? c.oracle_id}
-                </span>
-                <span className="text-xs text-navy/30 ml-auto font-mono">
-                  {new Date(c.created_at).toLocaleDateString()}
-                </span>
-              </div>
-              <p className="text-navy/50 text-xs italic mb-2 truncate">&ldquo;{c.prompt}&rdquo;</p>
-              <p className="text-navy text-sm leading-relaxed whitespace-pre-wrap line-clamp-6">
-                {c.artifact_text}
-              </p>
-            </div>
+            <ArtifactCard key={c.id} consultation={c} />
           ))}
         </div>
       )}

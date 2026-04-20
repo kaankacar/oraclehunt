@@ -67,7 +67,13 @@ export interface Consultation {
   oracle_id: OracleId
   prompt: string
   artifact_text: string
+  artifact_image?: string | null
   tx_hash: string | null
+  processing_trace: ProcessingTraceStep[]
+  fingerprint?: string | null
+  zk_contract_id?: string | null
+  zk_tx_hash?: string | null
+  zk_verify_tx_hash?: string | null
   created_at: string
 }
 
@@ -75,4 +81,18 @@ export interface WalletState {
   address: string | null
   balance: string | null
   isConnected: boolean
+}
+
+export interface TraceLink {
+  label: string
+  url: string
+}
+
+export interface ProcessingTraceStep {
+  id: string
+  label: string
+  status: 'pending' | 'success' | 'error'
+  detail?: string
+  txHash?: string
+  links?: TraceLink[]
 }

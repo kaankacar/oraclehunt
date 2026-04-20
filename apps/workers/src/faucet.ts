@@ -48,7 +48,7 @@ export async function fundTestnetWallet(walletAddress: string, env: Env): Promis
   const unsignedTx = new TransactionBuilder(new Account(treasuryAddress, sequence), {
     fee: '100',
     networkPassphrase: TESTNET_NETWORK_PASSPHRASE,
-  } as Parameters<typeof TransactionBuilder>[1])
+  } as ConstructorParameters<typeof TransactionBuilder>[1])
     .addOperation(buildOp([]))
     .setTimeout(60)
     .build()
@@ -83,7 +83,7 @@ export async function fundTestnetWallet(walletAddress: string, env: Env): Promis
     fee: finalFee.toString(),
     networkPassphrase: TESTNET_NETWORK_PASSPHRASE,
     sorobanData: transactionData,
-  } as Parameters<typeof TransactionBuilder>[1])
+  } as ConstructorParameters<typeof TransactionBuilder>[1])
     .addOperation(buildOp(authEntries))
     .setTimeout(60)
     .build()

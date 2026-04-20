@@ -2,6 +2,7 @@
 
 import { wrapFetchWithPayment, x402Client } from '@x402/fetch'
 import { buildPasskeyPaymentScheme, loadWalletFromStorage } from './wallet'
+import type { ProcessingTraceStep } from '@/types'
 
 const WORKERS_URL = process.env.NEXT_PUBLIC_WORKERS_URL ?? 'http://localhost:8787'
 const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
@@ -13,13 +14,26 @@ export interface OracleResult {
   artifactImage?: string  // base64 data URL, present for image-generating oracles (e.g. painter)
   oracleId: string
   txHash?: string
+  explorerUrl?: string
+  processingTrace: ProcessingTraceStep[]
   timestamp: string
 }
 
 export interface HiddenOracleResult {
   fingerprint: string
   zkPortrait: string
+  txHash?: string
+  explorerUrl?: string
+  contractExplorerUrl?: string
+  zkContractId?: string
+  zkTxHash?: string
+  zkVerifyTxHash?: string
+  processingTrace: ProcessingTraceStep[]
   timestamp: string
+}
+
+interface ProgressOptions {
+  onProgress?: (event: string) => void
 }
 
 /**
@@ -32,15 +46,18 @@ export async function consultOracle(
   oracleId: string,
   prompt: string,
   walletAddress: string,
+  options?: ProgressOptions,
 ): Promise<OracleResult> {
   const stored = loadWalletFromStorage()
   if (!stored) throw new Error('No wallet found — please create or reconnect your wallet')
 
-  const scheme = buildPasskeyPaymentScheme(walletAddress, stored.keyIdBase64)
+  options?.onProgress?.('prepare-payment-request')
+  const scheme = buildPasskeyPaymentScheme(walletAddress, stored.keyIdBase64, options?.onProgress)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const client = new x402Client().register(STELLAR_NETWORK as 'stellar:pubnet' | 'stellar:testnet', scheme as any)
   const payFetch = wrapFetchWithPayment(fetch, client)
 
+  options?.onProgress?.('send-oracle-request')
   const response = await payFetch(`${WORKERS_URL}/oracle/${oracleId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -56,6 +73,7 @@ export async function consultOracle(
     throw new Error(reason)
   }
 
+  options?.onProgress?.('oracle-response-received')
   return response.json() as Promise<OracleResult>
 }
 
@@ -65,7 +83,9 @@ export async function consultOracle(
 export async function consultHiddenOracle(
   walletAddress: string,
   passphrase: string,
+  options?: ProgressOptions,
 ): Promise<HiddenOracleResult> {
+  options?.onProgress?.('validate-hidden-passphrase')
   const response = await fetch(`${WORKERS_URL}/oracle/hidden`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -79,5 +99,6 @@ export async function consultHiddenOracle(
     throw new Error((err as { error?: string }).error ?? `HTTP ${response.status}`)
   }
 
+  options?.onProgress?.('hidden-oracle-response-received')
   return response.json() as Promise<HiddenOracleResult>
 }

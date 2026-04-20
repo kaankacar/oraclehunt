@@ -61,6 +61,10 @@ export interface WalletResult {
   keyIdBase64: string
 }
 
+export interface KnownWallet extends WalletResult {
+  username?: string | null
+}
+
 /**
  * Create a new passkey-backed Stellar smart wallet.
  * Submits the wallet-creation transaction directly to the Stellar RPC.
@@ -68,7 +72,12 @@ export interface WalletResult {
  */
 export async function createWallet(appName: string, username: string): Promise<WalletResult> {
   const kit = getPasskeyKit()
-  const { contractId, signedTx, keyIdBase64 } = await kit.createWallet(appName, username)
+  const { contractId, signedTx, keyIdBase64 } = await kit.createWallet(appName, username, {
+    authenticatorSelection: {
+      residentKey: 'required',
+      userVerification: 'preferred',
+    },
+  })
 
   // signedTx is a Transaction signed by passkey-kit's internal kalepail keypair.
   // Submit directly to the Stellar RPC — no fee re-processing by a relay.
@@ -144,7 +153,11 @@ export function buildX402Signer(contractId: string): ClientStellarSigner {
  * SorobanAuthorizationEntry. Passkey-kit needs the full entry. The authorizeEntry
  * option bypasses the wrapper entirely, which is how passkey-kit's own sign() works.
  */
-export function buildPasskeyPaymentScheme(walletContractId: string, keyIdBase64: string) {
+export function buildPasskeyPaymentScheme(
+  walletContractId: string,
+  keyIdBase64: string,
+  onProgress?: (event: string) => void,
+) {
   const kit = getPasskeyKit()
 
   return {
@@ -173,6 +186,7 @@ export function buildPasskeyPaymentScheme(walletContractId: string, keyIdBase64:
         : 'https://soroban-mainnet.stellar.org'
 
       // Get current ledger for expiration calculation
+      onProgress?.('prepare-payment-transaction')
       const latestRes = await fetch(rpcUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -220,6 +234,7 @@ export function buildPasskeyPaymentScheme(walletContractId: string, keyIdBase64:
       // If the user restored their session from localStorage without calling connectWallet(),
       // kit.wallet is undefined. Initialize it here using the provided contractId.
       if (!kit.wallet) {
+        onProgress?.('initialize-passkey-client')
         kit.wallet = new PasskeyClient({
           contractId: walletContractId,
           rpcUrl,
@@ -234,6 +249,7 @@ export function buildPasskeyPaymentScheme(walletContractId: string, keyIdBase64:
         const unsignedTxXdr = tx.toXDR()
         // kit.sign decodes the XDR inside passkey-kit's bundle, signs auth entries
         // there, and returns its own AssembledTransaction with the signed built tx.
+        onProgress?.('await-passkey-signature')
         const signedTxn = await kit.sign(unsignedTxXdr, { keyId: keyIdBase64, expiration: maxLedger })
 
         // Extract the signed transaction XDR from passkey-kit's AssembledTransaction.
@@ -249,6 +265,7 @@ export function buildPasskeyPaymentScheme(walletContractId: string, keyIdBase64:
         // assembleTransaction (called inside tx.simulate()) preserves existing signed
         // auth entries and only updates sorobanData + fee from the new simulation.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onProgress?.('resimulate-signed-payment')
         tx.built = TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase) as any
 
         await tx.simulate()
@@ -257,6 +274,7 @@ export function buildPasskeyPaymentScheme(walletContractId: string, keyIdBase64:
 
         // Return the post-re-simulation XDR — correct fee + signed auth entries.
         txXdr = tx.toXDR()
+        onProgress?.('payment-payload-ready')
       } catch (e) {
         throw new Error(`[signAuth] ${(e as Error).message}`)
       }
@@ -336,11 +354,26 @@ export function truncateAddress(address: string): string {
 }
 
 const WALLET_KEY = 'oraclehunt_wallet'
+const KNOWN_WALLETS_KEY = 'oraclehunt_known_wallets'
 
 export function saveWalletToStorage(contractId: string, keyIdBase64: string) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(WALLET_KEY, JSON.stringify({ contractId, keyIdBase64 }))
   }
+}
+
+export function saveKnownWalletToStorage(wallet: KnownWallet) {
+  if (typeof window === 'undefined') return
+
+  const existing = loadKnownWalletsFromStorage()
+  const next = [
+    wallet,
+    ...existing.filter(
+      (entry) => entry.contractId !== wallet.contractId && entry.keyIdBase64 !== wallet.keyIdBase64,
+    ),
+  ].slice(0, 8)
+
+  localStorage.setItem(KNOWN_WALLETS_KEY, JSON.stringify(next))
 }
 
 export function loadWalletFromStorage(): WalletResult | null {
@@ -351,6 +384,18 @@ export function loadWalletFromStorage(): WalletResult | null {
     return JSON.parse(raw) as WalletResult
   } catch {
     return null
+  }
+}
+
+export function loadKnownWalletsFromStorage(): KnownWallet[] {
+  if (typeof window === 'undefined') return []
+  const raw = localStorage.getItem(KNOWN_WALLETS_KEY)
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as KnownWallet[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
   }
 }
 

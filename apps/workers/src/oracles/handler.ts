@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { ORACLE_PROMPTS, PAINTER_IMAGE_PROMPT } from './prompts'
-import type { OracleId, Env, OracleRequest, OracleResponse } from '../types'
+import type {
+  OracleId,
+  Env,
+  OracleRequest,
+  OracleResponse,
+  ProcessingTraceStep,
+} from '../types'
+import { getTxExplorerUrl } from '../stellar'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 const TEXT_MODEL = 'gemini-2.5-flash'
@@ -58,6 +65,17 @@ export async function handleOracle(
   env: Env,
   txHash?: string,
 ): Promise<OracleResponse> {
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+  const { data: wallet, error: walletError } = await supabase
+    .from('wallets')
+    .select('id')
+    .eq('stellar_address', req.walletAddress)
+    .single()
+
+  if (walletError || !wallet) {
+    throw new Error(`Wallet registration missing for ${req.walletAddress}`)
+  }
+
   let artifact: string
   let artifactImage: string | undefined
 
@@ -73,26 +91,47 @@ export async function handleOracle(
   }
 
   const timestamp = new Date().toISOString()
+  const explorerUrl = txHash ? getTxExplorerUrl(env, txHash) : undefined
+  const processingTrace: ProcessingTraceStep[] = [
+    {
+      id: 'payment-settled',
+      label: 'Payment Settled on Stellar',
+      status: 'success',
+      detail: txHash
+        ? 'The sponsored x402 USDC payment was confirmed before the oracle responded.'
+        : 'Oracle request completed without a recorded payment transaction hash.',
+      txHash,
+      links: explorerUrl ? [{ label: 'Open payment on Stellar Expert', url: explorerUrl }] : undefined,
+    },
+    {
+      id: 'oracle-generated',
+      label: 'Oracle Generated Artifact',
+      status: 'success',
+      detail: oracleId === 'painter'
+        ? 'Gemini image generation returned the portrait and caption.'
+        : `Gemini ${TEXT_MODEL} returned the oracle artifact.`,
+    },
+    {
+      id: 'artifact-saved',
+      label: 'Saved to Codex',
+      status: 'success',
+      detail: 'The consultation was written to Supabase and is visible in Codex, Gallery, and Leaderboard.',
+    },
+  ]
 
-  // Save to Supabase — upsert the wallet first so consultations are never silently dropped
-  // (wallet row may be missing if the user reconnected without going through the creation flow)
-  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+  const { error: insertError } = await supabase.from('consultations').insert({
+    wallet_id: wallet.id,
+    oracle_id: oracleId,
+    prompt: req.prompt,
+    artifact_text: artifact,
+    artifact_image: artifactImage ?? null,
+    tx_hash: txHash ?? null,
+    processing_trace: processingTrace,
+  })
 
-  const { data: wallet } = await supabase
-    .from('wallets')
-    .select('id')
-    .eq('stellar_address', req.walletAddress)
-    .single()
-
-  if (wallet) {
-    await supabase.from('consultations').insert({
-      wallet_id: wallet.id,
-      oracle_id: oracleId,
-      prompt: req.prompt,
-      artifact_text: artifact,
-      tx_hash: txHash ?? null,
-    })
+  if (insertError) {
+    throw new Error(`Failed to persist consultation: ${insertError.message}`)
   }
 
-  return { artifact, artifactImage, oracleId, txHash, timestamp }
+  return { artifact, artifactImage, oracleId, txHash, explorerUrl, processingTrace, timestamp }
 }

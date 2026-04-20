@@ -29,8 +29,11 @@ app.use('*', async (c, next) => {
 
 // x402 payment middleware on all public Oracle routes
 app.use('/oracle/:id', async (c, next) => {
-  const oracleId = c.req.param('id') as OracleId
-  if (!VALID_ORACLE_IDS.includes(oracleId)) {
+  const oracleId = c.req.param('id')
+  if (oracleId === 'hidden') {
+    return next()
+  }
+  if (!VALID_ORACLE_IDS.includes(oracleId as OracleId)) {
     return c.json({ error: 'Unknown oracle' }, 404)
   }
 
@@ -38,6 +41,32 @@ app.use('/oracle/:id', async (c, next) => {
   const server = buildResourceServer(c.env)
 
   return paymentMiddleware(routes, server)(c, next)
+})
+
+// Oracle consultation endpoint
+// Hidden Oracle — passphrase-gated, no x402 payment
+app.post('/oracle/hidden', async (c) => {
+  let body: { walletAddress: string; passphrase: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+
+  if (!body.walletAddress?.trim() || !body.passphrase?.trim()) {
+    return c.json({ error: 'walletAddress and passphrase are required' }, 400)
+  }
+
+  try {
+    const result = await handleHiddenOracle(body.walletAddress, body.passphrase, c.env)
+    return c.json(result)
+  } catch (err) {
+    if (err instanceof Error && err.message === 'INVALID_PASSPHRASE') {
+      return c.json({ error: 'The Oracle does not recognize your phrase.' }, 403)
+    }
+    console.error('Hidden Oracle error:', err)
+    return c.json({ error: 'The Oracle is silent.' }, 500)
+  }
 })
 
 // Oracle consultation endpoint
@@ -64,32 +93,13 @@ app.post('/oracle/:id', async (c) => {
 
   const txHash = c.res.headers.get('X-PAYMENT-RESPONSE') ?? undefined
 
-  const result = await handleOracle(oracleId, body, c.env, txHash)
-  return c.json(result)
-})
-
-// Hidden Oracle — passphrase-gated, no x402 payment
-app.post('/oracle/hidden', async (c) => {
-  let body: { walletAddress: string; passphrase: string }
   try {
-    body = await c.req.json()
-  } catch {
-    return c.json({ error: 'Invalid request body' }, 400)
-  }
-
-  if (!body.walletAddress?.trim() || !body.passphrase?.trim()) {
-    return c.json({ error: 'walletAddress and passphrase are required' }, 400)
-  }
-
-  try {
-    const result = await handleHiddenOracle(body.walletAddress, body.passphrase, c.env)
+    const result = await handleOracle(oracleId, body, c.env, txHash)
     return c.json(result)
   } catch (err) {
-    if (err instanceof Error && err.message === 'INVALID_PASSPHRASE') {
-      return c.json({ error: 'The Oracle does not recognize your phrase.' }, 403)
-    }
-    console.error('Hidden Oracle error:', err)
-    return c.json({ error: 'The Oracle is silent.' }, 500)
+    console.error('Oracle error:', err)
+    const message = err instanceof Error ? err.message : 'The Oracle is silent.'
+    return c.json({ error: message }, 500)
   }
 })
 

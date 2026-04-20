@@ -44,6 +44,9 @@ vi.mock('@x402/hono', () => ({
 
 vi.mock('@x402/core/server', () => ({
   facilitatorConfig: vi.fn(() => ({})),
+  x402ResourceServer: vi.fn().mockImplementation(() => ({
+    register: vi.fn().mockReturnValue({}),
+  })),
 }))
 
 vi.mock('@x402/stellar/exact/server', () => ({
@@ -54,6 +57,7 @@ vi.mock('../oracles/handler', () => ({
   handleOracle: vi.fn().mockResolvedValue({
     artifact: 'Test prophecy',
     oracleId: 'seer',
+    processingTrace: [],
     timestamp: '2026-01-01T00:00:00.000Z',
   }),
 }))
@@ -62,13 +66,15 @@ vi.mock('../oracles/hidden', () => ({
   handleHiddenOracle: vi.fn().mockResolvedValue({
     fingerprint: 'abc123def456',
     zkPortrait: 'A portrait of cosmic identity',
+    processingTrace: [],
     timestamp: '2026-01-01T00:00:00.000Z',
   }),
 }))
 
 const mockEnv = {
-  ANTHROPIC_API_KEY: 'test-key',
+  GEMINI_API_KEY: 'test-key',
   ORACLE_TREASURY_ADDRESS: 'GBTEST123',
+  ORACLE_TREASURY_SECRET: 'SBTESTSECRET',
   USDC_CONTRACT: 'CUSDC123',
   FINGERPRINT_SALT: 'test-salt',
   SUPABASE_URL: 'https://test.supabase.co',
