@@ -185,6 +185,8 @@ export function buildPasskeyPaymentScheme(
         ? 'https://soroban-testnet.stellar.org'
         : 'https://soroban-mainnet.stellar.org'
 
+      let stage = 'latest-ledger'
+
       // Get current ledger for expiration calculation
       onProgress?.('prepare-payment-transaction')
       const latestRes = await fetch(rpcUrl, {
@@ -197,6 +199,7 @@ export function buildPasskeyPaymentScheme(
       const maxLedger = currentLedger + Math.ceil(maxTimeoutSeconds / 5)
 
       // Build the USDC transfer transaction
+      stage = 'simulation'
       const tx = await contract.AssembledTransaction.build({
         contractId: asset,
         method: 'transfer',
@@ -249,6 +252,7 @@ export function buildPasskeyPaymentScheme(
         const unsignedTxXdr = tx.toXDR()
         // kit.sign decodes the XDR inside passkey-kit's bundle, signs auth entries
         // there, and returns its own AssembledTransaction with the signed built tx.
+        stage = 'passkey-signature'
         onProgress?.('await-passkey-signature')
         const signedTxn = await kit.sign(unsignedTxXdr, { keyId: keyIdBase64, expiration: maxLedger })
 
@@ -265,6 +269,7 @@ export function buildPasskeyPaymentScheme(
         // assembleTransaction (called inside tx.simulate()) preserves existing signed
         // auth entries and only updates sorobanData + fee from the new simulation.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        stage = 'resimulation'
         onProgress?.('resimulate-signed-payment')
         tx.built = TransactionBuilder.fromXDR(signedTxXdr, networkPassphrase) as any
 
@@ -276,12 +281,46 @@ export function buildPasskeyPaymentScheme(
         txXdr = tx.toXDR()
         onProgress?.('payment-payload-ready')
       } catch (e) {
-        throw new Error(`[signAuth] ${(e as Error).message}`)
+        const rawMessage = e instanceof Error ? e.message : String(e)
+        const message = normalizePaymentError(rawMessage, stage)
+        console.error('[x402] createPaymentPayload failed', {
+          stage,
+          walletContractId,
+          payTo,
+          asset,
+          amount,
+          rawMessage,
+        })
+        throw new Error(message)
       }
 
       return { x402Version, payload: { transaction: txXdr } }
     },
   }
+}
+
+function normalizePaymentError(rawMessage: string, stage: string): string {
+  if (rawMessage.includes('op_no_trust') || rawMessage.includes('trustline')) {
+    return 'Your wallet cannot pay this oracle yet because the USDC trustline is missing.'
+  }
+
+  if (rawMessage.includes('insufficient') || rawMessage.includes('balance')) {
+    return 'Your wallet does not have enough USDC to pay this oracle.'
+  }
+
+  if (stage === 'passkey-signature') {
+    return `The payment request reached passkey signing but the browser did not complete it. (${rawMessage})`
+  }
+
+  if (stage === 'simulation') {
+    return `The oracle payment simulation failed before signing. (${rawMessage})`
+  }
+
+  if (stage === 'resimulation') {
+    return `The payment was signed, but re-simulation failed before the paid request could be sent. (${rawMessage})`
+  }
+
+  return `The oracle payment failed during ${stage}. (${rawMessage})`
 }
 
 function formatTokenAmount(raw: bigint, decimals: number): string {

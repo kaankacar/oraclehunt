@@ -16,7 +16,7 @@
 
 #![no_std]
 
-use soroban_poseidon::poseidon2_hash;
+use soroban_poseidon::poseidon_hash;
 use soroban_sdk::{
     contract, contractimpl, crypto::BnScalar, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, U256,
 };
@@ -44,7 +44,7 @@ impl ZkFingerprintContract {
         let salt_field = BnScalar::from_u256(U256::from_be_bytes(&env, &salt.to_bytes())).to_u256();
 
         let inputs = vec![&env, wallet_field, salt_field];
-        let hash = poseidon2_hash::<3, BnScalar>(&env, &inputs);
+        let hash = poseidon_hash::<3, BnScalar>(&env, &inputs);
         hash.to_be_bytes().try_into().unwrap()
     }
 

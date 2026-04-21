@@ -16,6 +16,7 @@
     "@supabase/supabase-js": "^2.43.0",
     "@x402/fetch": "^2.9.0",
     "@x402/stellar": "^2.9.0",
+    "ffjavascript": "^0.3.1",
     "next": "14.2.3",
     "passkey-kit": "^0.12.0",
     "react": "^18.3.0",

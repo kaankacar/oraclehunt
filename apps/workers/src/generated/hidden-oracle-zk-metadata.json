@@ -1,0 +1,13 @@
+{
+  "circuit": "hidden_oracle",
+  "phraseNormalization": "trim + uppercase + sha256 -> field",
+  "expectedPhraseField": "841165982608618504317770558903979768081833710740159520898876269773950029142",
+  "publicSignalsOrder": [
+    "nullifier",
+    "nonce",
+    "expectedFingerprint",
+    "expectedPhraseField"
+  ],
+  "wasmPath": "/zk/hidden_oracle.wasm",
+  "zkeyPath": "/zk/hidden_oracle_final.zkey"
+}

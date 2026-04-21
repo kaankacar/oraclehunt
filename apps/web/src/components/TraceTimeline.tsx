@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import type { ProcessingTraceStep } from '@/types'
 
 interface TraceTimelineProps {
@@ -68,46 +68,102 @@ export function TraceTimeline({
       </div>
 
       {isExpanded && (
-        <div className="mt-4 space-y-3">
-          {steps.map((step, index) => (
-            <div
-              key={step.id}
-              className="trace-step flex gap-3 items-start"
-              style={{ animationDelay: `${index * 70}ms` }}
-            >
-              <div className={`trace-glyph mt-0.5 text-xs ${statusClass(step.status)} ${
-                step.status === 'pending'
-                  ? 'trace-glyph-pending'
-                  : step.status === 'success'
-                    ? 'trace-glyph-success'
-                    : 'trace-glyph-error'
-              }`}>
-                {statusGlyph(step.status)}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-navy">{step.label}</p>
-                {step.detail && (
-                  <p className="text-xs text-navy/55 mt-1 leading-relaxed">{step.detail}</p>
-                )}
-                {!!step.links?.length && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {step.links.map((link) => (
-                      <a
-                        key={`${step.id}:${link.url}:${link.label}`}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-accent hover:text-accent-light underline"
-                      >
-                        {link.label}
-                      </a>
-                    ))}
+        variant === 'full' ? (
+          <div className="mt-4 overflow-x-auto pb-2">
+            <div className="flex min-w-max items-stretch gap-3">
+              {steps.map((step, index) => (
+                <Fragment key={step.id}>
+                  <div
+                    className="trace-step w-[280px] shrink-0 rounded-xl border border-accent/10 bg-white/80 p-4"
+                    style={{ animationDelay: `${index * 70}ms` }}
+                  >
+                    <div className="flex gap-3 items-start">
+                      <div className={`trace-glyph mt-0.5 text-xs ${statusClass(step.status)} ${
+                        step.status === 'pending'
+                          ? 'trace-glyph-pending'
+                          : step.status === 'success'
+                            ? 'trace-glyph-success'
+                            : 'trace-glyph-error'
+                      }`}>
+                        {statusGlyph(step.status)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-navy">{step.label}</p>
+                        {step.detail && (
+                          <p className="text-xs text-navy/55 mt-1 leading-relaxed">{step.detail}</p>
+                        )}
+                        {!!step.links?.length && (
+                          <div className="mt-2 flex flex-col gap-1.5">
+                            {step.links.map((link) => (
+                              <a
+                                key={`${step.id}:${link.url}:${link.label}`}
+                                href={link.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-accent hover:text-accent-light underline"
+                              >
+                                {link.label}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                  {index < steps.length - 1 && (
+                    <div
+                      className="trace-step flex shrink-0 items-center text-accent/35"
+                      style={{ animationDelay: `${index * 70 + 30}ms` }}
+                    >
+                      <div className="w-8 border-t border-dashed border-current" />
+                    </div>
+                  )}
+                </Fragment>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {steps.map((step, index) => (
+              <div
+                key={step.id}
+                className="trace-step flex gap-3 items-start"
+                style={{ animationDelay: `${index * 70}ms` }}
+              >
+                <div className={`trace-glyph mt-0.5 text-xs ${statusClass(step.status)} ${
+                  step.status === 'pending'
+                    ? 'trace-glyph-pending'
+                    : step.status === 'success'
+                      ? 'trace-glyph-success'
+                      : 'trace-glyph-error'
+                }`}>
+                  {statusGlyph(step.status)}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-navy">{step.label}</p>
+                  {step.detail && (
+                    <p className="text-xs text-navy/55 mt-1 leading-relaxed">{step.detail}</p>
+                  )}
+                  {!!step.links?.length && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {step.links.map((link) => (
+                        <a
+                          key={`${step.id}:${link.url}:${link.label}`}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-accent hover:text-accent-light underline"
+                        >
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   )

@@ -160,16 +160,6 @@ export default function OraclePage() {
             </div>
           )}
 
-          {liveTrace.length > 0 && (
-            <div className="mt-6">
-              <TraceTimeline
-                steps={liveTrace}
-                title="What’s happening in the background"
-                variant="full"
-              />
-            </div>
-          )}
-
           {result && resultConsultation && (
             <div className="mt-6 space-y-5">
               <ArtifactCard consultation={resultConsultation} />

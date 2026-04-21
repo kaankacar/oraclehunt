@@ -61,6 +61,12 @@ export const ORACLES: OracleMeta[] = [
   },
 ]
 
+export const PROGRESS_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar'] as const
+
+export function isProgressOracleId(oracleId: OracleId | string): oracleId is typeof PROGRESS_ORACLE_IDS[number] {
+  return PROGRESS_ORACLE_IDS.includes(oracleId as typeof PROGRESS_ORACLE_IDS[number])
+}
+
 export interface Consultation {
   id: string
   wallet_id: string

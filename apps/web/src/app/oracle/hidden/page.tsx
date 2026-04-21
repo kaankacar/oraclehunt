@@ -3,23 +3,35 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useWallet } from '@/components/WalletProvider'
-import { consultHiddenOracle, type HiddenOracleResult } from '@/lib/oracle-api'
+import { consultHiddenOracle, type HiddenOracleResult } from '@/lib/hidden-oracle-api'
 import { type Consultation, type ProcessingTraceStep } from '@/types'
 import { TraceTimeline } from '@/components/TraceTimeline'
 import { ArtifactCard } from '@/components/ArtifactCard'
 
 const HIDDEN_TRACE_TEMPLATE: ProcessingTraceStep[] = [
   {
-    id: 'client:hidden-passphrase',
-    label: 'Validating the Hidden Phrase',
+    id: 'client:hidden-challenge',
+    label: 'Issuing One-Time Challenge',
     status: 'pending',
-    detail: 'Checking that the phrase discovered through the Informant matches the unlock gate.',
+    detail: 'The worker derives a wallet-bound fingerprint on Soroban and mints a nonce for this attempt.',
+  },
+  {
+    id: 'client:hidden-witness',
+    label: 'Preparing Private Witness',
+    status: 'pending',
+    detail: 'The browser normalizes your wallet and phrase into private witness inputs for the circuit.',
+  },
+  {
+    id: 'client:hidden-proof',
+    label: 'Generating Proof Locally',
+    status: 'pending',
+    detail: 'The BN254 proof is generated in your browser. The phrase does not get posted to the worker.',
   },
   {
     id: 'client:hidden-request',
-    label: 'Requesting the Hidden Oracle',
+    label: 'Relaying Proof Verification to Soroban',
     status: 'pending',
-    detail: 'The worker is preparing the ZK fingerprint derivation and verification flow.',
+    detail: 'The worker relays the on-chain verification transaction. The portrait renders only after Soroban accepts the proof.',
   },
 ]
 
@@ -39,17 +51,40 @@ export default function HiddenOraclePage() {
     setError('')
     setTrace(HIDDEN_TRACE_TEMPLATE.map((step, index) => ({
       ...step,
-      status: index === 0 ? 'success' : 'pending',
+      status: index === 0 ? 'pending' : 'pending',
     })))
 
     try {
       const data = await consultHiddenOracle(address, passphrase.trim(), {
         onProgress: (event) => {
-          if (event === 'validate-hidden-passphrase') {
-            setTrace((prev) => prev.map((step, index) => ({
-              ...step,
-              status: index === 0 ? 'success' : step.status,
-            })))
+          if (event === 'hidden-challenge-ready') {
+            setTrace((prev) => prev.map((step) => {
+              if (step.id === 'client:hidden-challenge' || step.id === 'client:hidden-witness') {
+                return { ...step, status: 'success' }
+              }
+              return step
+            }))
+          }
+          if (event === 'generate-hidden-proof') {
+            setTrace((prev) => prev.map((step) => (
+              step.id === 'client:hidden-proof'
+                ? { ...step, status: 'pending' }
+                : step
+            )))
+          }
+          if (event === 'hidden-proof-generated') {
+            setTrace((prev) => prev.map((step) => (
+              step.id === 'client:hidden-proof'
+                ? { ...step, status: 'success' }
+                : step
+            )))
+          }
+          if (event === 'submit-hidden-proof') {
+            setTrace((prev) => prev.map((step) => (
+              step.id === 'client:hidden-request'
+                ? { ...step, status: 'pending' }
+                : step
+            )))
           }
           if (event === 'hidden-oracle-response-received') {
             setTrace((prev) => prev.map((step) => ({ ...step, status: 'success' })))
@@ -58,7 +93,7 @@ export default function HiddenOraclePage() {
       })
       setTrace((prev) => [...prev, ...data.processingTrace])
       setResult(data)
-      } catch (err) {
+    } catch (err) {
       if (err instanceof Error && err.message === 'INVALID_PASSPHRASE') {
         setError('The Oracle does not recognize your phrase. Seek deeper.')
       } else {
@@ -97,7 +132,7 @@ export default function HiddenOraclePage() {
         <div className="text-6xl mb-4">🗝️</div>
         <h1 className="text-3xl font-bold text-navy mb-2">The Hidden Oracle</h1>
         <p className="text-navy/60 text-sm leading-relaxed max-w-sm mx-auto">
-          This Oracle derives a Soroban fingerprint, verifies it, and only then renders.
+          Your browser generates a zero-knowledge proof that you know the hidden phrase. Soroban verifies that proof on-chain, and only then does the Oracle render your portrait.
         </p>
       </div>
 
@@ -130,19 +165,12 @@ export default function HiddenOraclePage() {
                   disabled={isLoading || !passphrase.trim()}
                   className="w-full bg-accent hover:bg-accent-light disabled:opacity-40 text-white font-semibold py-3 rounded-lg transition-colors"
                 >
-                  {isLoading ? 'The Oracle stirs…' : 'Speak the Phrase'}
+                  {isLoading ? 'The Oracle stirs…' : 'Prove the Phrase'}
                 </button>
               </>
             )}
           </div>
 
-          {trace.length > 0 && (
-            <TraceTimeline
-              steps={trace}
-              title="What’s happening in the background"
-              variant="full"
-            />
-          )}
         </div>
       ) : (
         <div className="space-y-6">
@@ -163,7 +191,17 @@ export default function HiddenOraclePage() {
                 rel="noreferrer"
                 className="text-sm border border-accent/30 text-accent px-4 py-2 rounded-lg hover:bg-light-blue transition-colors"
               >
-                Open ZK contract on Stellar Expert
+                Open verifier contract on Stellar Expert
+              </a>
+            )}
+            {result.fingerprintContractExplorerUrl && (
+              <a
+                href={result.fingerprintContractExplorerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm border border-accent/30 text-accent px-4 py-2 rounded-lg hover:bg-light-blue transition-colors"
+              >
+                Open fingerprint contract on Stellar Expert
               </a>
             )}
             {result.explorerUrl && (
@@ -173,7 +211,7 @@ export default function HiddenOraclePage() {
                 rel="noreferrer"
                 className="text-sm border border-accent/30 text-accent px-4 py-2 rounded-lg hover:bg-light-blue transition-colors"
               >
-                Open derive transaction on Stellar Expert
+                Open proof verification transaction on Stellar Expert
               </a>
             )}
             <Link

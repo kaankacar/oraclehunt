@@ -86,10 +86,11 @@ export function ArtifactCard({
               What Happened Technically
             </p>
             <p className="text-sm text-navy/75 leading-relaxed">
-              The hidden phrase unlocked the oracle. A Soroban contract derived and verified your
-              wallet fingerprint before the portrait was generated. The fingerprint below is the
-              real on-chain identity artifact. Use the execution trace for transaction and contract
-              links.
+              Your browser proved knowledge of the hidden phrase without sending the phrase to the
+              worker. Soroban verified that BN254 proof on-chain against your wallet-bound
+              fingerprint, and only after that did the Oracle generate the portrait. The
+              fingerprint below is the real on-chain artifact. Use the execution trace for the
+              contract and transaction links.
             </p>
           </div>
 

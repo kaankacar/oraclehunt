@@ -122,7 +122,7 @@ export async function invokeTreasuryContract(
     txHash,
     explorerUrl: getTxExplorerUrl(env, txHash),
     contractExplorerUrl: getContractExplorerUrl(env, contractId),
-    returnValueXdr: simulation.results?.[0]?.xdr,
+    ...(simulation.results?.[0]?.xdr ? { returnValueXdr: simulation.results[0].xdr } : {}),
   }
 }
 

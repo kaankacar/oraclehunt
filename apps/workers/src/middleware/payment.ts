@@ -80,7 +80,10 @@ class LocalFacilitator {
   private readonly treasuryAddress: string
   private readonly treasurySecret: string
   private readonly network: 'stellar:pubnet' | 'stellar:testnet'
-  private readonly maxTransactionFeeStroops = 200_000
+  // Passkey-backed smart-account auth can push Soroban resource fees far above
+  // the original 200k cap. Recent live browser-signed requests have come in at
+  // ~23.4M stroops on testnet, so keep a bounded ceiling with headroom.
+  private readonly maxTransactionFeeStroops = 50_000_000
 
   constructor(treasuryAddress: string, treasurySecret: string, network: 'stellar:pubnet' | 'stellar:testnet') {
     this.treasuryAddress = treasuryAddress
@@ -116,48 +119,55 @@ class LocalFacilitator {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async verify(paymentPayload: any, requirements: any) {
+    const fail = (invalidReason: string, payer?: string, extra?: Record<string, unknown>) => {
+      console.error('[x402 verify] FAILED:', invalidReason, payer ? `payer:${payer}` : '', extra ?? '')
+      return payer
+        ? { isValid: false, invalidReason, payer }
+        : { isValid: false, invalidReason }
+    }
+
     try {
       const stellarPayload = paymentPayload.payload
       if (!stellarPayload?.transaction || typeof stellarPayload.transaction !== 'string') {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_malformed' }
+        return fail('invalid_exact_stellar_payload_malformed')
       }
 
       let transaction: Transaction
       try {
         transaction = new Transaction(stellarPayload.transaction, this.networkPassphrase)
       } catch {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_malformed' }
+        return fail('invalid_exact_stellar_payload_malformed')
       }
 
       if (transaction.operations.length !== 1) {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_operation' }
+        return fail('invalid_exact_stellar_payload_wrong_operation')
       }
 
       const op = transaction.operations[0]
       if (!op) {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_operation' }
+        return fail('invalid_exact_stellar_payload_wrong_operation')
       }
       if (op.type !== 'invokeHostFunction') {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_operation' }
+        return fail('invalid_exact_stellar_payload_wrong_operation')
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const invokeOp = op as any
       const func = invokeOp.func
       if (!func || func.switch().name !== 'hostFunctionTypeInvokeContract') {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_operation' }
+        return fail('invalid_exact_stellar_payload_wrong_operation')
       }
 
       const invokeArgs = func.invokeContract()
       const contractAddress = Address.fromScAddress(invokeArgs.contractAddress()).toString()
       if (contractAddress !== requirements.asset) {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_asset' }
+        return fail('invalid_exact_stellar_payload_wrong_asset')
       }
 
       const functionName = invokeArgs.functionName().toString()
       const args = invokeArgs.args()
       if (functionName !== 'transfer' || args.length !== 3) {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_function_name' }
+        return fail('invalid_exact_stellar_payload_wrong_function_name')
       }
 
       const fromAddress = scValToNative(args[0]) as string
@@ -165,15 +175,18 @@ class LocalFacilitator {
       const amount = scValToNative(args[2]) as bigint
 
       if (toAddress !== requirements.payTo) {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_recipient', payer: fromAddress }
+        return fail('invalid_exact_stellar_payload_wrong_recipient', fromAddress)
       }
       if (amount !== BigInt(requirements.amount)) {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_wrong_amount', payer: fromAddress }
+        return fail('invalid_exact_stellar_payload_wrong_amount', fromAddress)
       }
 
       const clientFee = parseInt(transaction.fee, 10)
       if (clientFee > this.maxTransactionFeeStroops) {
-        return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_fee_exceeds_maximum', payer: fromAddress }
+        return fail('invalid_exact_stellar_payload_fee_exceeds_maximum', fromAddress, {
+          clientFee,
+          maxTransactionFeeStroops: this.maxTransactionFeeStroops,
+        })
       }
 
       // Verify all auth entries are signed (no scvVoid — would mean unsigned)
@@ -182,7 +195,7 @@ class LocalFacilitator {
         if (credTypeName === 'sorobanCredentialsAddress') {
           const sig = auth.credentials().address().signature()
           if (sig.switch().name === 'scvVoid') {
-            return { isValid: false, invalidReason: 'invalid_exact_stellar_payload_missing_payer_signature', payer: fromAddress }
+            return fail('invalid_exact_stellar_payload_missing_payer_signature', fromAddress)
           }
         }
       }
@@ -245,45 +258,34 @@ class LocalFacilitator {
       rebuiltTx.sign(keypair)
       const signedXdr = rebuiltTx.toEnvelope().toXDR('base64')
 
-      // 6. Submit via Stellar RPC (native fetch)
-      const sendRes = await fetch(this.rpcUrl, {
+      // 6. Submit via Horizon. In local workerd, RPC POSTs for large passkey-auth
+      // payloads have been intermittently throwing internal errors. Horizon accepts
+      // v1 transaction envelopes synchronously, which avoids the extra poll loop.
+      const sendRes = await fetch(`${this.horizonUrl}/transactions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params: { transaction: signedXdr } }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `tx=${encodeURIComponent(signedXdr)}`,
       })
-      const sendJson = await sendRes.json() as { error?: unknown; result?: { status: string; hash: string } }
-
-      if (sendJson.error || sendJson.result?.status !== 'PENDING') {
-        console.error('[x402 settle] sendTransaction failed:', JSON.stringify(sendJson))
-        return { success: false, errorReason: 'settle_exact_stellar_transaction_submission_failed', network: requirements.network, transaction: '' }
+      const sendJson = await sendRes.json() as {
+        hash?: string
+        successful?: boolean
+        extras?: { result_codes?: unknown }
+        title?: string
+        detail?: string
       }
 
-      const txHash = sendJson.result.hash
-      console.log('[x402 settle] PENDING, polling for hash:', txHash)
-
-      // 7. Poll for on-chain confirmation (up to 60 s, every 2 s)
-      for (let i = 0; i < 30; i++) {
-        await new Promise<void>(resolve => setTimeout(resolve, 2000))
-        const getRes = await fetch(this.rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTransaction', params: { hash: txHash } }),
-        })
-        const getJson = await getRes.json() as { result?: { status: string } }
-        const status = getJson.result?.status
-        if (status === 'SUCCESS') {
-          console.log('[x402 settle] CONFIRMED, tx:', txHash)
-          return { success: true, transaction: txHash, network: requirements.network, payer: '' }
+      if (!sendRes.ok || sendJson.successful === false || !sendJson.hash) {
+        console.error('[x402 settle] Horizon submission failed:', JSON.stringify(sendJson))
+        return {
+          success: false,
+          errorReason: 'settle_exact_stellar_transaction_submission_failed',
+          network: requirements.network,
+          transaction: sendJson.hash ?? '',
         }
-        if (status === 'FAILED') {
-          console.error('[x402 settle] on-chain FAILED, tx:', txHash)
-          return { success: false, errorReason: 'settle_exact_stellar_transaction_failed', network: requirements.network, transaction: txHash }
-        }
-        // NOT_FOUND = still processing
       }
 
-      console.error('[x402 settle] polling timeout, tx:', txHash)
-      return { success: false, errorReason: 'settle_exact_stellar_transaction_timeout', network: requirements.network, transaction: txHash ?? '' }
+      console.log('[x402 settle] CONFIRMED via Horizon, tx:', sendJson.hash)
+      return { success: true, transaction: sendJson.hash, network: requirements.network, payer: '' }
     } catch (e) {
       console.error('[x402 settle] unexpected error:', e instanceof Error ? e.message : String(e))
       return { success: false, errorReason: 'unexpected_settle_error', network: requirements.network, transaction: '' }

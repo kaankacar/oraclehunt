@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { ORACLES } from '@/types'
+import { ORACLES, PROGRESS_ORACLE_IDS, isProgressOracleId } from '@/types'
 import { useWallet } from '@/components/WalletProvider'
 import { getConsultedOracles } from '@/lib/supabase'
 
@@ -15,8 +15,8 @@ export default function MarketplacePage() {
     getConsultedOracles(address).then(setConsulted)
   }, [address])
 
-  const completionCount = consulted.size
-  const isComplete = completionCount >= 5
+  const completionCount = Array.from(consulted).filter(isProgressOracleId).length
+  const isComplete = completionCount >= PROGRESS_ORACLE_IDS.length
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">
@@ -28,7 +28,7 @@ export default function MarketplacePage() {
         {isConnected && (
           <div className="mt-4 inline-flex items-center gap-2 bg-white border border-accent/20 rounded-full px-4 py-2 text-sm">
             <span className="text-navy/60">Codex progress:</span>
-            <span className="font-semibold text-accent">{completionCount} / 5 Oracles</span>
+            <span className="font-semibold text-accent">{completionCount} / {PROGRESS_ORACLE_IDS.length} Core Oracles</span>
             {isComplete && <span className="text-green-600">✓ Complete!</span>}
           </div>
         )}
@@ -73,9 +73,9 @@ export default function MarketplacePage() {
           <div className="relative">
             <div className="text-4xl mb-3 grayscale">🗝️</div>
             <h2 className="text-xl font-bold text-navy mb-1">The Hidden Oracle</h2>
-            <p className="text-navy/40 text-sm font-medium mb-3">Zero-Knowledge Portrait</p>
+            <p className="text-navy/40 text-sm font-medium mb-3">Client-Side Proof, Soroban Verification</p>
             <p className="text-navy/50 text-sm mb-5 leading-relaxed italic">
-              Its location is unknown. Seek the clues within The Informant&apos;s riddles.
+              Its location is unknown. Find the phrase in The Informant&apos;s riddles, prove it in your browser, and let Soroban verify the proof on-chain.
             </p>
             <div className="flex items-center justify-between">
               <span className="bg-navy/10 text-navy/40 font-mono text-sm px-3 py-1 rounded">

@@ -19,20 +19,6 @@ export interface OracleResult {
   timestamp: string
 }
 
-export interface HiddenOracleResult {
-  fingerprint: string
-  zkPortrait: string
-  artifactImage?: string
-  txHash?: string
-  explorerUrl?: string
-  contractExplorerUrl?: string
-  zkContractId?: string
-  zkTxHash?: string
-  zkVerifyTxHash?: string
-  processingTrace: ProcessingTraceStep[]
-  timestamp: string
-}
-
 interface ProgressOptions {
   onProgress?: (event: string) => void
 }
@@ -59,11 +45,22 @@ export async function consultOracle(
   const payFetch = wrapFetchWithPayment(fetch, client)
 
   options?.onProgress?.('send-oracle-request')
-  const response = await payFetch(`${WORKERS_URL}/oracle/${oracleId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, walletAddress }),
-  })
+  let response: Response
+  try {
+    response = await payFetch(`${WORKERS_URL}/oracle/${oracleId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, walletAddress }),
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('[x402] public oracle payment flow failed', {
+      oracleId,
+      walletAddress,
+      message,
+    })
+    throw new Error(message)
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '')
@@ -76,30 +73,4 @@ export async function consultOracle(
 
   options?.onProgress?.('oracle-response-received')
   return response.json() as Promise<OracleResult>
-}
-
-/**
- * Submit passphrase to unlock the Hidden Oracle. No x402 payment.
- */
-export async function consultHiddenOracle(
-  walletAddress: string,
-  passphrase: string,
-  options?: ProgressOptions,
-): Promise<HiddenOracleResult> {
-  options?.onProgress?.('validate-hidden-passphrase')
-  const response = await fetch(`${WORKERS_URL}/oracle/hidden`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ walletAddress, passphrase }),
-  })
-
-  if (response.status === 403) throw new Error('INVALID_PASSPHRASE')
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }))
-    throw new Error((err as { error?: string }).error ?? `HTTP ${response.status}`)
-  }
-
-  options?.onProgress?.('hidden-oracle-response-received')
-  return response.json() as Promise<HiddenOracleResult>
 }

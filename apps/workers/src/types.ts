@@ -9,6 +9,7 @@ export interface Env {
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   ZK_CONTRACT_ID: string
+  HIDDEN_ORACLE_VERIFIER_CONTRACT_ID: string
   INFORMANT_PASSPHRASE: string
   STELLAR_NETWORK: string
   ADMIN_CORS_ORIGIN?: string
@@ -36,11 +37,22 @@ export interface HiddenOracleResponse {
   txHash?: string
   explorerUrl?: string
   contractExplorerUrl?: string
+  fingerprintContractExplorerUrl?: string
   zkContractId?: string
   zkTxHash?: string
   zkVerifyTxHash?: string
   processingTrace: ProcessingTraceStep[]
   timestamp: string
+}
+
+export interface HiddenOracleChallengeResponse {
+  challengeId: string
+  nonce: string
+  saltField: string
+  expectedFingerprintField: string
+  deriveTxHash: string
+  deriveExplorerUrl: string
+  fingerprintContractExplorerUrl: string
 }
 
 export interface TraceLink {

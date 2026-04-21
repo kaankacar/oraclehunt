@@ -9,7 +9,7 @@ import { cors } from 'hono/cors'
 import { paymentMiddleware } from '@x402/hono'
 import { buildPaymentRoutes, buildResourceServer } from './middleware/payment'
 import { handleOracle } from './oracles/handler'
-import { handleHiddenOracle } from './oracles/hidden'
+import { createHiddenOracleChallenge, handleHiddenOracle } from './oracles/hidden'
 import { fundTestnetWallet } from './faucet'
 import type { Env, OracleId, OracleRequest } from './types'
 
@@ -27,6 +27,19 @@ app.use('*', async (c, next) => {
   })(c, next)
 })
 
+app.onError((err, c) => {
+  console.error('Unhandled worker error:', err)
+  const origin = c.env.ADMIN_CORS_ORIGIN ?? '*'
+  return c.json(
+    { error: err instanceof Error ? err.message : 'Unhandled worker error' },
+    500,
+    {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Expose-Headers': 'PAYMENT-REQUIRED,PAYMENT-RESPONSE,X-PAYMENT-RESPONSE',
+    },
+  )
+})
+
 // x402 payment middleware on all public Oracle routes
 app.use('/oracle/:id', async (c, next) => {
   const oracleId = c.req.param('id')
@@ -37,6 +50,9 @@ app.use('/oracle/:id', async (c, next) => {
     return c.json({ error: 'Unknown oracle' }, 404)
   }
 
+  const xPayment = c.req.header('X-PAYMENT') ?? c.req.header('PAYMENT-SIGNATURE')
+  console.log('[x402 request]', oracleId, xPayment ? `payment-header-present:${xPayment.length}` : 'payment-header-missing')
+
   const routes = buildPaymentRoutes(c.env)
   const server = buildResourceServer(c.env)
 
@@ -45,27 +61,66 @@ app.use('/oracle/:id', async (c, next) => {
 
 // Oracle consultation endpoint
 // Hidden Oracle — passphrase-gated, no x402 payment
-app.post('/oracle/hidden', async (c) => {
-  let body: { walletAddress: string; passphrase: string }
+app.post('/oracle/hidden/challenge', async (c) => {
+  let body: { walletAddress: string }
   try {
     body = await c.req.json()
   } catch {
     return c.json({ error: 'Invalid request body' }, 400)
   }
 
-  if (!body.walletAddress?.trim() || !body.passphrase?.trim()) {
-    return c.json({ error: 'walletAddress and passphrase are required' }, 400)
+  if (!body.walletAddress?.trim()) {
+    return c.json({ error: 'walletAddress is required' }, 400)
   }
 
   try {
-    const result = await handleHiddenOracle(body.walletAddress, body.passphrase, c.env)
+    const result = await createHiddenOracleChallenge(body.walletAddress, c.env)
+    return c.json(result)
+  } catch (err) {
+    console.error('Hidden Oracle challenge error:', err)
+    const message = err instanceof Error ? err.message : 'Hidden Oracle challenge failed'
+    return c.json({ error: message }, 500)
+  }
+})
+
+app.post('/oracle/hidden', async (c) => {
+  let body: {
+    walletAddress: string
+    challengeId: string
+    proof: unknown
+    publicSignals: unknown
+  }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+
+  if (
+    !body.walletAddress?.trim()
+    || !body.challengeId?.trim()
+    || !body.proof
+    || !Array.isArray(body.publicSignals)
+  ) {
+    return c.json({ error: 'walletAddress, challengeId, proof, and publicSignals are required' }, 400)
+  }
+
+  try {
+    const result = await handleHiddenOracle(
+      body.walletAddress,
+      body.challengeId,
+      body.proof as never,
+      body.publicSignals as string[],
+      c.env,
+    )
     return c.json(result)
   } catch (err) {
     if (err instanceof Error && err.message === 'INVALID_PASSPHRASE') {
       return c.json({ error: 'The Oracle does not recognize your phrase.' }, 403)
     }
     console.error('Hidden Oracle error:', err)
-    return c.json({ error: 'The Oracle is silent.' }, 500)
+    const message = err instanceof Error ? err.message : 'The Oracle is silent.'
+    return c.json({ error: message }, 500)
   }
 })
 

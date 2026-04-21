@@ -63,6 +63,15 @@ vi.mock('../oracles/handler', () => ({
 }))
 
 vi.mock('../oracles/hidden', () => ({
+  createHiddenOracleChallenge: vi.fn().mockResolvedValue({
+    challengeId: 'challenge-1',
+    nonce: '1',
+    saltField: '2',
+    expectedFingerprint: 'abc123def456',
+    deriveTxHash: 'derive-tx',
+    deriveExplorerUrl: 'https://stellar.expert/explorer/testnet/tx/derive-tx',
+    fingerprintContractExplorerUrl: 'https://stellar.expert/explorer/testnet/contract/fingerprint',
+  }),
   handleHiddenOracle: vi.fn().mockResolvedValue({
     fingerprint: 'abc123def456',
     zkPortrait: 'A portrait of cosmic identity',
@@ -80,6 +89,7 @@ const mockEnv = {
   SUPABASE_URL: 'https://test.supabase.co',
   SUPABASE_SERVICE_KEY: 'test-service-key',
   ZK_CONTRACT_ID: 'PLACEHOLDER',
+  HIDDEN_ORACLE_VERIFIER_CONTRACT_ID: 'PLACEHOLDER',
   INFORMANT_PASSPHRASE: 'LIQUIDITY',
   STELLAR_NETWORK: 'pubnet',
 }
@@ -183,7 +193,22 @@ describe('x402 payment middleware', () => {
     expect(res.status).toBe(404)
   })
 
-  it('returns 403 on wrong Hidden Oracle passphrase', async () => {
+  it('returns 200 on Hidden Oracle challenge creation', async () => {
+    const { default: app } = await import('../index')
+    const req = new Request('http://localhost/oracle/hidden/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: 'GTEST' }),
+    })
+
+    const res = await app.fetch(req, mockEnv)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toHaveProperty('challengeId')
+    expect(body).toHaveProperty('expectedFingerprint')
+  })
+
+  it('returns 403 on wrong Hidden Oracle passphrase proof', async () => {
     const { default: app } = await import('../index')
     // Mock handleHiddenOracle to throw INVALID_PASSPHRASE
     const { handleHiddenOracle } = await import('../oracles/hidden')
@@ -192,19 +217,29 @@ describe('x402 payment middleware', () => {
     const req = new Request('http://localhost/oracle/hidden', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress: 'GTEST', passphrase: 'wrongphrase' }),
+      body: JSON.stringify({
+        walletAddress: 'GTEST',
+        challengeId: 'challenge-1',
+        proof: { pi_a: ['1', '2', '1'], pi_b: [['1', '2'], ['3', '4'], ['1', '0']], pi_c: ['1', '2', '1'] },
+        publicSignals: ['1', '2', '3', '4'],
+      }),
     })
 
     const res = await app.fetch(req, mockEnv)
     expect(res.status).toBe(403)
   })
 
-  it('returns 200 on correct Hidden Oracle passphrase', async () => {
+  it('returns 200 on valid Hidden Oracle proof submission', async () => {
     const { default: app } = await import('../index')
     const req = new Request('http://localhost/oracle/hidden', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress: 'GTEST', passphrase: 'LIQUIDITY' }),
+      body: JSON.stringify({
+        walletAddress: 'GTEST',
+        challengeId: 'challenge-1',
+        proof: { pi_a: ['1', '2', '1'], pi_b: [['1', '2'], ['3', '4'], ['1', '0']], pi_c: ['1', '2', '1'] },
+        publicSignals: ['1', '2', '3', '4'],
+      }),
     })
 
     const res = await app.fetch(req, mockEnv)

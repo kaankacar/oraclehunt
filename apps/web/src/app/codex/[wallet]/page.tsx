@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ORACLES, type Consultation } from '@/types'
+import { ORACLES, PROGRESS_ORACLE_IDS, isProgressOracleId, type Consultation } from '@/types'
 import { getCodex, getPublicDisplayName } from '@/lib/supabase'
 import { truncateAddress } from '@/lib/wallet'
 import { useWallet } from '@/components/WalletProvider'
@@ -31,7 +31,8 @@ export default function CodexPage() {
   }, [walletParam])
 
   const uniqueOracles = new Set(consultations.map((c) => c.oracle_id))
-  const isComplete = uniqueOracles.size >= 5
+  const progressOracles = new Set(consultations.map((c) => c.oracle_id).filter(isProgressOracleId))
+  const isComplete = progressOracles.size >= PROGRESS_ORACLE_IDS.length
 
   function copyShareLink() {
     navigator.clipboard.writeText(window.location.href)
@@ -65,7 +66,7 @@ export default function CodexPage() {
               ? 'bg-green-100 text-green-700'
               : 'bg-light-blue text-accent'
           }`}>
-            {uniqueOracles.size}/5 Oracles {isComplete ? '✓ Complete' : ''}
+            {progressOracles.size}/{PROGRESS_ORACLE_IDS.length} Core Oracles {isComplete ? '✓ Complete' : ''}
           </div>
 
           <button
