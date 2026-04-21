@@ -43,6 +43,16 @@ export function TraceTimeline({
     () => steps.filter((step) => step.status === 'success').length,
     [steps],
   )
+  const summaryLinks = useMemo(() => {
+    const seen = new Set<string>()
+
+    return steps.flatMap((step) => step.links ?? []).filter((link) => {
+      const key = `${link.label}:${link.url}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [steps])
 
   if (steps.length === 0) return null
 
@@ -66,6 +76,22 @@ export function TraceTimeline({
           </button>
         )}
       </div>
+
+      {variant === 'compact' && summaryLinks.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {summaryLinks.map((link) => (
+            <a
+              key={`${link.label}:${link.url}`}
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-accent/20 bg-white/70 px-3 py-1 text-xs text-accent hover:text-accent-light hover:border-accent/35 transition-colors"
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      )}
 
       {isExpanded && (
         variant === 'full' ? (
