@@ -12,3 +12,4 @@ codex_data.json
 *.pdf
 __pycache__/
 .venv/
+.vercel

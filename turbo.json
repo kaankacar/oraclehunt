@@ -3,7 +3,20 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "dist/**", "!.next/cache/**"]
+      "outputs": [".next/**", "dist/**", "!.next/cache/**"],
+      "env": [
+        "STELLAR_NETWORK",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_KEY",
+        "GEMINI_API_KEY",
+        "ORACLE_TREASURY_SECRET",
+        "USDC_CONTRACT",
+        "FINGERPRINT_SALT",
+        "ZK_CONTRACT_ID",
+        "HIDDEN_ORACLE_VERIFIER_CONTRACT_ID",
+        "INFORMANT_PASSPHRASE",
+        "SMOL_API_URL"
+      ]
     },
     "dev": {
       "cache": false,
