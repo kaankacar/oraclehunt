@@ -41,22 +41,29 @@ async function geminiImage(
   apiKey: string,
   prompt: string,
 ): Promise<{ text: string; imageDataUrl?: string }> {
-  const res = await fetch(`${GEMINI_BASE}/${IMAGE_MODEL}:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-    }),
-  })
-  const json = await res.json() as GeminiResponse
-  if (json.error) throw new Error(`Gemini error: ${json.error.message}`)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(`${GEMINI_BASE}/${IMAGE_MODEL}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+      }),
+    })
+    const json = await res.json() as GeminiResponse
+    if (json.error) throw new Error(`Gemini error: ${json.error.message}`)
 
-  const parts = json.candidates?.[0]?.content?.parts ?? []
-  const text = parts.find(p => p.text)?.text ?? ''
-  const img = parts.find(p => p.inlineData)?.inlineData
-  const imageDataUrl = img ? `data:${img.mimeType};base64,${img.data}` : undefined
-  return { text, imageDataUrl }
+    const parts = json.candidates?.[0]?.content?.parts ?? []
+    const text = parts.find(p => p.text)?.text ?? ''
+    const img = parts.find(p => p.inlineData)?.inlineData
+    const imageDataUrl = img ? `data:${img.mimeType};base64,${img.data}` : undefined
+
+    if (imageDataUrl) {
+      return { text, imageDataUrl }
+    }
+  }
+
+  throw new Error('Painter generation returned no image. Please try again.')
 }
 
 export async function handleOracle(
