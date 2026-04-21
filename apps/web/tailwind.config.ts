@@ -5,10 +5,10 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        navy: '#0D1B5E',
-        accent: '#1B4FD8',
-        'light-blue': '#EEF3FF',
-        'accent-light': '#4B7BF5',
+        navy: '#17161F',
+        accent: '#6157FF',
+        'light-blue': '#F6F0E8',
+        'accent-light': '#C8C1FF',
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],

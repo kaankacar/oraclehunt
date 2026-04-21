@@ -5,45 +5,52 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 :root {
-  --navy: #0D1B5E;
-  --accent: #1B4FD8;
-  --light-blue: #EEF3FF;
+  --navy: #17161f;
+  --navy-rgb: 23, 22, 31;
+  --accent: #6157ff;
+  --accent-rgb: 97, 87, 255;
+  --accent-light: #c8c1ff;
+  --light-blue: #f6f0e8;
 }
 
 body {
   background-color: var(--light-blue);
+  background-image: radial-gradient(circle at top, rgba(255, 255, 255, 0.72), transparent 38%);
   color: var(--navy);
   font-family: system-ui, -apple-system, sans-serif;
 }
 
 .oracle-card {
-  background: white;
-  border: 1px solid rgba(27, 79, 216, 0.15);
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(var(--navy-rgb), 0.08);
   border-radius: 12px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 14px 32px rgba(var(--navy-rgb), 0.05);
 }
 
 .oracle-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(27, 79, 216, 0.12);
+  border-color: rgba(var(--accent-rgb), 0.2);
+  box-shadow: 0 18px 38px rgba(var(--navy-rgb), 0.08);
 }
 
 .artifact-card {
-  background: white;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(var(--navy-rgb), 0.08);
   border-left: 3px solid var(--accent);
   border-radius: 0 8px 8px 0;
 }
 
 .fingerprint-display {
   font-family: 'JetBrains Mono', monospace;
-  background: #0D1B5E;
-  color: #4B7BF5;
+  background: #1d1c27;
+  color: var(--accent-light);
   padding: 16px;
   border-radius: 8px;
   word-break: break-all;
   font-size: 0.75rem;
   line-height: 1.6;
-  border: 1px solid rgba(75, 123, 245, 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
 }
 
 @keyframes traceStepIn {
@@ -111,4 +118,5 @@ body {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--light-blue); }
-::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(var(--navy-rgb), 0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-rgb), 0.55); }

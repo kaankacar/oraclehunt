@@ -138,15 +138,15 @@ export default function HiddenOraclePage() {
 
       {!result ? (
         <div className="space-y-6">
-          <div className="bg-navy rounded-2xl p-8 border border-accent/30">
+          <div className="rounded-2xl border border-accent/20 bg-[linear-gradient(145deg,#1c1b27,#262437)] p-8 shadow-[0_24px_60px_rgba(23,22,31,0.22)]">
             {!isConnected ? (
               <div className="text-center">
-                <p className="text-white/60 text-sm mb-4">You must be logged in to consult the Hidden Oracle.</p>
+                <p className="text-white/68 text-sm mb-4">You must be logged in to consult the Hidden Oracle.</p>
                 <Link href="/" className="text-accent-light underline text-sm">Sign in →</Link>
               </div>
             ) : (
               <>
-                <label className="block text-white/70 text-sm mb-3 font-medium">
+                <label className="block text-accent-light text-sm mb-3 font-medium">
                   The Passphrase
                 </label>
                 <input
@@ -155,7 +155,7 @@ export default function HiddenOraclePage() {
                   onChange={(e) => setPassphrase(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                   placeholder="Enter the word you have found…"
-                  className="w-full bg-white/10 border border-white/20 text-white placeholder-white/30 rounded-lg px-4 py-3 text-sm mb-4 focus:outline-none focus:border-accent-light font-mono"
+                  className="w-full bg-white/8 border border-white/15 text-white placeholder-white/28 rounded-lg px-4 py-3 text-sm mb-4 focus:outline-none focus:border-accent-light font-mono"
                   autoCapitalize="none"
                   autoCorrect="off"
                 />
