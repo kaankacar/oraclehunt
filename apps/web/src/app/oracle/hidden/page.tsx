@@ -155,7 +155,7 @@ export default function HiddenOraclePage() {
                   onChange={(e) => setPassphrase(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                   placeholder="Enter the word you have found…"
-                  className="w-full bg-white/8 border border-white/15 text-white placeholder-white/28 rounded-lg px-4 py-3 text-sm mb-4 focus:outline-none focus:border-accent-light font-mono"
+                  className="w-full bg-white border border-white/35 text-navy placeholder:text-navy/40 rounded-lg px-4 py-3 text-sm mb-4 focus:outline-none focus:border-accent-light focus:ring-2 focus:ring-accent-light/25 font-mono"
                   autoCapitalize="none"
                   autoCorrect="off"
                 />
