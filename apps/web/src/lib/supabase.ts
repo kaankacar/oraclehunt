@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { OracleId } from '@/types'
+import { PROGRESS_ORACLE_IDS, type OracleId } from '@/types'
 
 export function createSupabaseClient() {
   return createClient(
@@ -78,27 +78,21 @@ export async function castVote(
   voterAddress: string,
   targetAddress: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createSupabaseClient()
-
-  const [{ data: voter }, { data: target }] = await Promise.all([
-    supabase.from('wallet_profiles_public').select('id').eq('stellar_address', voterAddress).single(),
-    supabase.from('wallet_profiles_public').select('id').eq('stellar_address', targetAddress).single(),
-  ])
-
-  if (!voter || !target) {
-    return { success: false, error: 'Wallet not found' }
-  }
-
-  const { error } = await supabase.from('votes').insert({
-    voter_wallet_id: voter.id,
-    target_wallet_id: target.id,
+  const response = await fetch('/api/votes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ voterAddress, targetAddress }),
   })
 
-  if (error) {
-    if (error.code === '23505') {
-      return { success: false, error: 'You have already voted for this Codex.' }
-    }
-    return { success: false, error: 'Vote failed. Please try again.' }
+  let payload: { error?: string } = {}
+  try {
+    payload = await response.json() as { error?: string }
+  } catch {
+    payload = {}
+  }
+
+  if (!response.ok) {
+    return { success: false, error: payload.error ?? 'Vote failed. Please try again.' }
   }
 
   return { success: true }
@@ -150,26 +144,94 @@ export async function getPublicDisplayName(stellarAddress: string): Promise<stri
 export async function getLeaderboard() {
   const supabase = createSupabaseClient()
 
-  const { data } = await supabase
-    .from('leaderboard')
-    .select('*')
-    .order('oracles_consulted', { ascending: false })
-    .order('completed_at', { ascending: true, nullsFirst: false })
-    .order('vote_count', { ascending: false })
+  const [{ data: profiles }, { data: consultations }, { data: votes }] = await Promise.all([
+    supabase
+      .from('wallet_profiles_public')
+      .select('id, stellar_address, username'),
+    supabase
+      .from('consultations')
+      .select('wallet_id, oracle_id, created_at')
+      .in('oracle_id', [...PROGRESS_ORACLE_IDS]),
+    supabase
+      .from('votes')
+      .select('target_wallet_id'),
+  ])
 
-  const allEntries = data ?? []
-  const byCompletion = allEntries.slice(0, 10)
-  const byVotes = [...allEntries]
-    .sort((a, b) => {
-      if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count
-      if (b.oracles_consulted !== a.oracles_consulted) return b.oracles_consulted - a.oracles_consulted
-      return a.stellar_address.localeCompare(b.stellar_address)
+  const profilesList = profiles ?? []
+  const consultationList = consultations ?? []
+  const voteList = votes ?? []
+
+  const consultedByWallet = new Map<string, Set<string>>()
+  const completionMomentByWallet = new Map<string, string>()
+
+  const consultationGroups = new Map<string, Array<{ oracle_id: string; created_at: string }>>()
+  for (const consultation of consultationList) {
+    const existing = consultationGroups.get(consultation.wallet_id) ?? []
+    existing.push(consultation)
+    consultationGroups.set(consultation.wallet_id, existing)
+  }
+
+  for (const [walletId, walletConsultations] of consultationGroups) {
+    const earliestByOracle = new Map<string, string>()
+
+    for (const consultation of walletConsultations) {
+      const previous = earliestByOracle.get(consultation.oracle_id)
+      if (!previous || consultation.created_at < previous) {
+        earliestByOracle.set(consultation.oracle_id, consultation.created_at)
+      }
+    }
+
+    const consulted = new Set(earliestByOracle.keys())
+    consultedByWallet.set(walletId, consulted)
+
+    const completionTimestamps = Array.from(earliestByOracle.values()).sort((a, b) => a.localeCompare(b))
+    if (completionTimestamps.length >= PROGRESS_ORACLE_IDS.length) {
+      const completedAt = completionTimestamps[PROGRESS_ORACLE_IDS.length - 1]
+      if (completedAt) {
+        completionMomentByWallet.set(walletId, completedAt)
+      }
+    }
+  }
+
+  const voteCountByWallet = new Map<string, number>()
+  for (const vote of voteList) {
+    voteCountByWallet.set(
+      vote.target_wallet_id,
+      (voteCountByWallet.get(vote.target_wallet_id) ?? 0) + 1,
+    )
+  }
+
+  const allEntries = profilesList
+    .map((profile) => {
+      const consulted = consultedByWallet.get(profile.id) ?? new Set<string>()
+      const oraclesConsulted = consulted.size
+
+      return {
+        stellar_address: profile.stellar_address,
+        display_name: profile.username,
+        oracles_consulted: oraclesConsulted,
+        is_complete: oraclesConsulted >= PROGRESS_ORACLE_IDS.length,
+        completed_at: completionMomentByWallet.get(profile.id) ?? null,
+        vote_count: voteCountByWallet.get(profile.id) ?? 0,
+      }
     })
-    .slice(0, 10)
+    .sort((a, b) => {
+      if (b.oracles_consulted !== a.oracles_consulted) return b.oracles_consulted - a.oracles_consulted
+
+      if (a.completed_at && b.completed_at && a.completed_at !== b.completed_at) {
+        return a.completed_at.localeCompare(b.completed_at)
+      }
+      if (a.completed_at && !b.completed_at) return -1
+      if (!a.completed_at && b.completed_at) return 1
+
+      if (b.vote_count !== a.vote_count) return b.vote_count - a.vote_count
+
+      const aName = a.display_name ?? a.stellar_address
+      const bName = b.display_name ?? b.stellar_address
+      return aName.localeCompare(bName)
+    })
 
   return {
-    byCompletion,
-    byVotes,
     allEntries,
   }
 }

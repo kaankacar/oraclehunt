@@ -88,6 +88,9 @@ export default function GalleryPage() {
         <p className="text-navy/60 text-sm">
           Explore every oracle output, or switch to the per-seeker Codex view.
         </p>
+        <p className="text-navy/45 text-xs mt-2">
+          Votes are cast here in the Gallery, and each vote applies to the seeker&apos;s whole Codex.
+        </p>
       </div>
 
       <div className="flex justify-center gap-3 mb-8">
@@ -153,7 +156,7 @@ export default function GalleryPage() {
                               : 'bg-light-blue text-accent hover:bg-accent hover:text-white'
                           }`}
                         >
-                          {hasVoted ? `★ ${artifact.vote_count}` : `Vote for this Codex · ☆ ${artifact.vote_count}`}
+                          {hasVoted ? `★ ${artifact.vote_count}` : `Vote for this seeker's Codex · ☆ ${artifact.vote_count}`}
                         </button>
                       ) : (
                         <span className="text-xs text-navy/30">★ {artifact.vote_count}</span>
@@ -201,6 +204,10 @@ export default function GalleryPage() {
                   <div className="text-xs text-navy/50 mb-4">
                     {entry.oracles_consulted}/5 Oracles consulted
                   </div>
+
+                  <p className="text-[11px] text-navy/40 mb-4">
+                    Votes are cast in the Gallery and apply to the whole Codex.
+                  </p>
 
                   <div className="flex items-center justify-between">
                     <Link

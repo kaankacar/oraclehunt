@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { getLeaderboard } from '@/lib/supabase'
 import { truncateAddress } from '@/lib/wallet'
+import { PROGRESS_ORACLE_IDS } from '@/types'
 
 interface LeaderEntry {
   stellar_address: string
@@ -15,15 +16,11 @@ interface LeaderEntry {
 }
 
 export default function LeaderboardPage() {
-  const [byCompletion, setByCompletion] = useState<LeaderEntry[]>([])
-  const [byVotes, setByVotes] = useState<LeaderEntry[]>([])
   const [allEntries, setAllEntries] = useState<LeaderEntry[]>([])
   const [lastUpdated, setLastUpdated] = useState(new Date())
 
   async function load() {
     const data = await getLeaderboard()
-    setByCompletion(data.byCompletion as LeaderEntry[])
-    setByVotes(data.byVotes as LeaderEntry[])
     setAllEntries(data.allEntries as LeaderEntry[])
     setLastUpdated(new Date())
   }
@@ -38,110 +35,87 @@ export default function LeaderboardPage() {
     return entry.display_name ?? truncateAddress(entry.stellar_address)
   }
 
-  const medals = ['🥇', '🥈', '🥉']
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
       <div className="text-center mb-10">
         <h1 className="text-3xl font-bold text-navy mb-2">Leaderboard</h1>
+        <p className="text-navy/60 text-sm">
+          Ranked by core oracle progress, then votes, then who finished first.
+        </p>
+        <p className="text-navy/45 text-xs mt-2">
+          Votes are cast in the Gallery and apply to each seeker&apos;s full Codex.
+        </p>
         <p className="text-navy/40 text-xs font-mono">
           Updated {lastUpdated.toLocaleTimeString()}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* By completion */}
-        <div>
-          <h2 className="text-lg font-bold text-navy mb-4 flex items-center gap-2">
-            <span>🔮</span> Most Oracles Consulted
-          </h2>
-          <div className="space-y-2">
-            {byCompletion.map((entry, i) => (
-              <Link
-                key={entry.stellar_address}
-                href={`/codex/${entry.stellar_address}`}
-                className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-accent/10 hover:border-accent/30 transition-colors"
-              >
-                <span className="text-lg w-8">{medals[i] ?? `${i + 1}.`}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-navy truncate">{displayName(entry)}</p>
-                  {entry.is_complete && (
-                    <p className="text-xs text-green-600">
-                      ✓ Complete
-                      {entry.completed_at && ` · ${new Date(entry.completed_at).toLocaleDateString()}`}
-                    </p>
-                  )}
-                </div>
-                <span className="text-accent font-mono font-bold text-sm">
-                  {entry.oracles_consulted}/5
-                </span>
-              </Link>
-            ))}
-            {byCompletion.length === 0 && (
-              <p className="text-navy/40 text-sm text-center py-6">No entries yet.</p>
-            )}
-          </div>
+      <div className="bg-white rounded-2xl border border-accent/10 overflow-hidden">
+        <div className="hidden sm:grid grid-cols-[56px_1fr_96px_86px] px-4 py-3 text-xs uppercase tracking-wide text-navy/40 border-b border-accent/10">
+          <span>Rank</span>
+          <span>Seeker</span>
+          <span>Core</span>
+          <span>Votes</span>
         </div>
-
-        {/* By votes */}
-        <div>
-          <h2 className="text-lg font-bold text-navy mb-4 flex items-center gap-2">
-            <span>⭐</span> Crowd Favorites
-          </h2>
-          <div className="space-y-2">
-            {byVotes.map((entry, i) => (
-              <Link
-                key={entry.stellar_address}
-                href={`/codex/${entry.stellar_address}`}
-                className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-accent/10 hover:border-accent/30 transition-colors"
-              >
-                <span className="text-lg w-8">{medals[i] ?? `${i + 1}.`}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-navy truncate">{displayName(entry)}</p>
-                </div>
-                <span className="text-accent font-mono font-bold text-sm">
-                  ★ {entry.vote_count}
-                </span>
-              </Link>
-            ))}
-            {byVotes.length === 0 && (
-              <p className="text-navy/40 text-sm text-center py-6">No votes cast yet.</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-12">
-        <h2 className="text-lg font-bold text-navy mb-4">All Seekers</h2>
-        <div className="bg-white rounded-2xl border border-accent/10 overflow-hidden">
-          <div className="grid grid-cols-[56px_1fr_100px_90px] px-4 py-3 text-xs uppercase tracking-wide text-navy/40 border-b border-accent/10">
-            <span>Rank</span>
-            <span>Seeker</span>
-            <span>Oracles</span>
-            <span>Votes</span>
-          </div>
-          {allEntries.length === 0 ? (
-            <div className="px-4 py-8 text-sm text-navy/40 text-center">No entries yet.</div>
-          ) : (
-            allEntries.map((entry, i) => (
-              <Link
-                key={`all:${entry.stellar_address}`}
-                href={`/codex/${entry.stellar_address}`}
-                className="grid grid-cols-[56px_1fr_100px_90px] items-center px-4 py-3 text-sm border-b last:border-b-0 border-accent/5 hover:bg-light-blue/60 transition-colors"
-              >
+        {allEntries.length === 0 ? (
+          <div className="px-4 py-8 text-sm text-navy/40 text-center">No entries yet.</div>
+        ) : (
+          allEntries.map((entry, i) => (
+            <Link
+              key={`all:${entry.stellar_address}`}
+              href={`/codex/${entry.stellar_address}`}
+              className="block border-b last:border-b-0 border-accent/5 hover:bg-light-blue/60 transition-colors"
+            >
+              <div className="hidden sm:grid grid-cols-[56px_1fr_96px_86px] items-center px-4 py-3 text-sm">
                 <span className="font-mono text-navy/40">{i + 1}</span>
                 <div className="min-w-0">
-                  <p className="font-semibold text-navy truncate">{displayName(entry)}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="font-semibold text-navy truncate">{displayName(entry)}</p>
+                    {entry.is_complete && (
+                      <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">
+                        Complete
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-navy/35 font-mono truncate">
                     {truncateAddress(entry.stellar_address)}
+                    {entry.completed_at && ` · ${new Date(entry.completed_at).toLocaleDateString()}`}
                   </p>
                 </div>
-                <span className="font-mono text-accent">{entry.oracles_consulted}/5</span>
+                <span className="font-mono text-accent">{entry.oracles_consulted}/{PROGRESS_ORACLE_IDS.length}</span>
                 <span className="font-mono text-navy/60">★ {entry.vote_count}</span>
-              </Link>
-            ))
-          )}
-        </div>
+              </div>
+
+              <div className="sm:hidden px-4 py-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-navy/35 font-mono mb-1">#{i + 1}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="font-semibold text-navy truncate">{displayName(entry)}</p>
+                      {entry.is_complete && (
+                        <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">
+                          Complete
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-navy/35 font-mono truncate">
+                      {truncateAddress(entry.stellar_address)}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-mono text-accent text-sm">{entry.oracles_consulted}/{PROGRESS_ORACLE_IDS.length}</p>
+                    <p className="font-mono text-navy/60 text-xs">★ {entry.vote_count}</p>
+                  </div>
+                </div>
+                {entry.completed_at && (
+                  <p className="text-xs text-navy/40">
+                    Finished on {new Date(entry.completed_at).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+            </Link>
+          ))
+        )}
       </div>
     </div>
   )
