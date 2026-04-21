@@ -12,6 +12,7 @@ export interface Env {
   HIDDEN_ORACLE_VERIFIER_CONTRACT_ID: string
   INFORMANT_PASSPHRASE: string
   STELLAR_NETWORK: string
+  SMOL_API_URL?: string
   ADMIN_CORS_ORIGIN?: string
 }
 
@@ -23,7 +24,38 @@ export interface OracleRequest {
 export interface OracleResponse {
   artifact: string
   artifactImage?: string  // base64 data URL, present for image-generating oracles (e.g. painter)
+  audioUrl1?: string | null
+  audioUrl2?: string | null
   oracleId: OracleId | 'hidden'
+  txHash?: string
+  explorerUrl?: string
+  processingTrace: ProcessingTraceStep[]
+  timestamp: string
+}
+
+export interface ComposerPendingResponse {
+  status: 'pending'
+  oracleId: 'composer'
+  jobId: string
+  txHash?: string
+  explorerUrl?: string
+  processingTrace: ProcessingTraceStep[]
+  timestamp: string
+}
+
+export interface ComposerAuthRequiredResponse {
+  status: 'smol-auth-required'
+  oracleId: 'composer'
+  txHash?: string
+  explorerUrl?: string
+  processingTrace: ProcessingTraceStep[]
+  timestamp: string
+}
+
+export interface ComposerErrorResponse {
+  status: 'error'
+  oracleId: 'composer'
+  error: string
   txHash?: string
   explorerUrl?: string
   processingTrace: ProcessingTraceStep[]

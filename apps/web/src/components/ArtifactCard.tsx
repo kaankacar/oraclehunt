@@ -137,6 +137,28 @@ export function ArtifactCard({
           <p className="text-navy text-sm leading-relaxed whitespace-pre-wrap">
             {consultation.artifact_text}
           </p>
+
+          {consultation.oracle_id === 'composer' && (consultation.audio_url_1 || consultation.audio_url_2) && (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {consultation.audio_url_1 && (
+                <div className="rounded-xl border border-accent/10 bg-light-blue/40 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-accent mb-2">
+                    Variation 1
+                  </p>
+                  <audio controls preload="none" className="w-full" src={consultation.audio_url_1} />
+                </div>
+              )}
+
+              {consultation.audio_url_2 && (
+                <div className="rounded-xl border border-accent/10 bg-light-blue/40 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-accent mb-2">
+                    Variation 2
+                  </p>
+                  <audio controls preload="none" className="w-full" src={consultation.audio_url_2} />
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

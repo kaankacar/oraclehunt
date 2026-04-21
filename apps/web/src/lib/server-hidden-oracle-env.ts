@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs'
 import path from 'path'
-import { Keypair } from '@stellar/stellar-sdk'
+import { Keypair } from '@stellar/stellar-base'
 import type { Env } from '../../../workers/src/types'
 
 function parseEnvFile(raw: string): Record<string, string> {

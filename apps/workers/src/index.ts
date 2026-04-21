@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 // @x402/hono uses Buffer for base64-encoding the payment response header.
 // Cloudflare Workers doesn't expose Buffer as a global even with nodejs_compat,
 // so we set it explicitly here before any x402 code runs.
@@ -8,6 +9,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { paymentMiddleware } from '@x402/hono'
 import { buildPaymentRoutes, buildResourceServer } from './middleware/payment'
+import { handleComposerOracle, pollComposerStatus, resumeComposerOracle } from './oracles/composer'
 import { handleOracle } from './oracles/handler'
 import { createHiddenOracleChallenge, handleHiddenOracle } from './oracles/hidden'
 import { fundTestnetWallet } from './faucet'
@@ -16,6 +18,36 @@ import type { Env, OracleId, OracleRequest } from './types'
 const VALID_ORACLE_IDS: OracleId[] = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant']
 
 const app = new Hono<{ Bindings: Env }>()
+
+function extractPaymentTransactionHash(encodedHeader: string | null): string | undefined {
+  if (!encodedHeader) return undefined
+
+  const decode = (encoding: BufferEncoding) => {
+    const parsed = JSON.parse(Buffer.from(encodedHeader, encoding).toString('utf8')) as {
+      transaction?: string
+      txHash?: string
+    }
+    return parsed.transaction ?? parsed.txHash
+  }
+
+  try {
+    return decode('base64url')
+  } catch {
+    try {
+      return decode('base64')
+    } catch {
+      return encodedHeader
+    }
+  }
+}
+
+function createComposerPaymentReference(rawPaymentHeader: string | null, settledTxHash?: string): string | undefined {
+  if (settledTxHash) return settledTxHash
+  if (!rawPaymentHeader) return undefined
+
+  const digest = createHash('sha256').update(rawPaymentHeader).digest('hex')
+  return `payref:${digest}`
+}
 
 // CORS — expose x402 headers so the browser can read them
 app.use('*', async (c, next) => {
@@ -42,6 +74,13 @@ app.onError((err, c) => {
 
 // x402 payment middleware on all public Oracle routes
 app.use('/oracle/:id', async (c, next) => {
+  if (
+    c.req.path === '/oracle/composer/resume'
+    || c.req.path.startsWith('/oracle/composer/status/')
+  ) {
+    return next()
+  }
+
   const oracleId = c.req.param('id')
   if (oracleId === 'hidden') {
     return next()
@@ -124,6 +163,46 @@ app.post('/oracle/hidden', async (c) => {
   }
 })
 
+app.post('/oracle/composer/resume', async (c) => {
+  let body: { walletAddress?: string; txHash?: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400)
+  }
+
+  if (!body.walletAddress?.trim() || !body.txHash?.trim()) {
+    return c.json({ error: 'walletAddress and txHash are required' }, 400)
+  }
+
+  try {
+    const result = await resumeComposerOracle(body.walletAddress, body.txHash, c.env)
+    const status = 'status' in result && result.status !== 'error' ? 202 : 200
+    return c.json(result, status)
+  } catch (err) {
+    console.error('Composer resume error:', err)
+    const message = err instanceof Error ? err.message : 'Composer resume failed.'
+    return c.json({ error: message }, 500)
+  }
+})
+
+app.get('/oracle/composer/status/:jobId', async (c) => {
+  const jobId = c.req.param('jobId')
+  if (!jobId?.trim()) {
+    return c.json({ error: 'jobId is required' }, 400)
+  }
+
+  try {
+    const result = await pollComposerStatus(jobId, c.env)
+    const status = 'status' in result && result.status === 'pending' ? 202 : 200
+    return c.json(result, status)
+  } catch (err) {
+    console.error('Composer status error:', err)
+    const message = err instanceof Error ? err.message : 'Composer status failed.'
+    return c.json({ error: message }, 500)
+  }
+})
+
 // Oracle consultation endpoint
 app.post('/oracle/:id', async (c) => {
   const oracleId = c.req.param('id') as OracleId
@@ -146,9 +225,21 @@ app.post('/oracle/:id', async (c) => {
     return c.json({ error: 'Prompt too long (max 1000 characters)' }, 400)
   }
 
-  const txHash = c.res.headers.get('X-PAYMENT-RESPONSE') ?? undefined
+  const txHash = extractPaymentTransactionHash(
+    c.res.headers.get('PAYMENT-RESPONSE') ?? c.res.headers.get('X-PAYMENT-RESPONSE'),
+  )
+  const composerPaymentRef = createComposerPaymentReference(
+    c.req.header('PAYMENT-SIGNATURE') ?? c.req.header('X-PAYMENT') ?? null,
+    txHash,
+  )
 
   try {
+    if (oracleId === 'composer') {
+      const result = await handleComposerOracle(body, c.env, composerPaymentRef)
+      const status = 'status' in result && result.status !== 'error' ? 202 : 200
+      return c.json(result, status)
+    }
+
     const result = await handleOracle(oracleId, body, c.env, txHash)
     return c.json(result)
   } catch (err) {

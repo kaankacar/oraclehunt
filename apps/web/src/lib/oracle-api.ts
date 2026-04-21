@@ -1,7 +1,12 @@
 'use client'
 
 import { wrapFetchWithPayment, x402Client } from '@x402/fetch'
-import { buildPasskeyPaymentScheme, loadWalletFromStorage } from './wallet'
+import {
+  authenticateWalletForSmol,
+  buildPasskeyPaymentScheme,
+  loadWalletFromStorage,
+  saveWalletToStorage,
+} from './wallet'
 import type { ProcessingTraceStep } from '@/types'
 
 const WORKERS_URL = process.env.NEXT_PUBLIC_WORKERS_URL ?? 'http://localhost:8787'
@@ -12,6 +17,8 @@ const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
 export interface OracleResult {
   artifact: string
   artifactImage?: string  // base64 data URL, present for image-generating oracles (e.g. painter)
+  audioUrl1?: string | null
+  audioUrl2?: string | null
   oracleId: string
   txHash?: string
   explorerUrl?: string
@@ -19,8 +26,57 @@ export interface OracleResult {
   timestamp: string
 }
 
+export interface ComposerPendingResult {
+  status: 'pending'
+  oracleId: 'composer'
+  jobId: string
+  txHash?: string
+  explorerUrl?: string
+  processingTrace: ProcessingTraceStep[]
+  timestamp: string
+}
+
+export interface ComposerAuthRequiredResult {
+  status: 'smol-auth-required'
+  oracleId: 'composer'
+  txHash?: string
+  explorerUrl?: string
+  processingTrace: ProcessingTraceStep[]
+  timestamp: string
+}
+
+export interface ComposerErrorResult {
+  status: 'error'
+  oracleId: 'composer'
+  error: string
+  txHash?: string
+  explorerUrl?: string
+  processingTrace: ProcessingTraceStep[]
+  timestamp: string
+}
+
+export type OracleConsultResponse =
+  | OracleResult
+  | ComposerPendingResult
+  | ComposerAuthRequiredResult
+  | ComposerErrorResult
+
 interface ProgressOptions {
   onProgress?: (event: string) => void
+}
+
+async function readOracleError(response: Response): Promise<string> {
+  const body = await response.text().catch(() => '')
+  console.log('[x402] oracle response body:', body)
+
+  let err: { error?: string; message?: string } = { error: 'Unknown error' }
+  try {
+    err = JSON.parse(body) as { error?: string; message?: string }
+  } catch {
+    err = { error: body || 'Unknown error' }
+  }
+
+  return err.message ?? err.error ?? `HTTP ${response.status}`
 }
 
 /**
@@ -34,7 +90,7 @@ export async function consultOracle(
   prompt: string,
   walletAddress: string,
   options?: ProgressOptions,
-): Promise<OracleResult> {
+): Promise<OracleConsultResponse> {
   const stored = loadWalletFromStorage()
   if (!stored) throw new Error('No wallet found — please create or reconnect your wallet')
 
@@ -63,14 +119,61 @@ export async function consultOracle(
   }
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    console.log('[x402] oracle response body:', body)
-    let err: { error?: string; message?: string } = { error: 'Unknown error' }
-    try { err = JSON.parse(body) } catch { /* ignore */ }
-    const reason = err.message ?? err.error ?? `HTTP ${response.status}`
-    throw new Error(reason)
+    throw new Error(await readOracleError(response))
   }
 
   options?.onProgress?.('oracle-response-received')
-  return response.json() as Promise<OracleResult>
+  return response.json() as Promise<OracleConsultResponse>
+}
+
+export async function ensureSmolAuth(walletAddress: string): Promise<void> {
+  const stored = loadWalletFromStorage()
+  if (!stored || stored.contractId !== walletAddress) {
+    throw new Error('Reconnect your wallet before linking Composer to Smol.')
+  }
+
+  const auth = await authenticateWalletForSmol(walletAddress, stored.keyIdBase64)
+  saveWalletToStorage(auth.contractId, auth.keyIdBase64)
+
+  const response = await fetch('/api/smol/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contractId: auth.contractId,
+      keyIdBase64: auth.keyIdBase64,
+      assertion: auth.assertion,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readOracleError(response))
+  }
+}
+
+export async function resumeComposerJob(
+  walletAddress: string,
+  txHash: string,
+): Promise<OracleConsultResponse> {
+  const response = await fetch(`${WORKERS_URL}/oracle/composer/resume`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ walletAddress, txHash }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readOracleError(response))
+  }
+
+  return response.json() as Promise<OracleConsultResponse>
+}
+
+export async function pollComposerJob(
+  jobId: string,
+): Promise<OracleResult | ComposerPendingResult | ComposerErrorResult> {
+  const response = await fetch(`${WORKERS_URL}/oracle/composer/status/${jobId}`)
+  if (!response.ok) {
+    throw new Error(await readOracleError(response))
+  }
+
+  return response.json() as Promise<OracleResult | ComposerPendingResult | ComposerErrorResult>
 }

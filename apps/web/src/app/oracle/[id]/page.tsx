@@ -5,7 +5,17 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ORACLES, type OracleMeta, type Consultation, type ProcessingTraceStep } from '@/types'
 import { useWallet } from '@/components/WalletProvider'
-import { consultOracle, type OracleResult } from '@/lib/oracle-api'
+import {
+  consultOracle,
+  ensureSmolAuth,
+  pollComposerJob,
+  resumeComposerJob,
+  type ComposerAuthRequiredResult,
+  type ComposerErrorResult,
+  type ComposerPendingResult,
+  type OracleConsultResponse,
+  type OracleResult,
+} from '@/lib/oracle-api'
 import { getOracleHistory } from '@/lib/supabase'
 import { ArtifactCard } from '@/components/ArtifactCard'
 import { TraceTimeline } from '@/components/TraceTimeline'
@@ -43,6 +53,7 @@ export default function OraclePage() {
   const [history, setHistory] = useState<Consultation[]>([])
   const [liveTrace, setLiveTrace] = useState<ProcessingTraceStep[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingLabel, setLoadingLabel] = useState('Consulting…')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -69,6 +80,7 @@ export default function OraclePage() {
     setError('')
     setResult(null)
     setLiveTrace(PUBLIC_TRACE_TEMPLATE)
+    setLoadingLabel('Consulting…')
 
     try {
       const data = await consultOracle(oracleId, prompt, address, {
@@ -77,8 +89,22 @@ export default function OraclePage() {
         },
       })
 
+      if (oracleId === 'composer') {
+        const composerResult = await resolveComposerConsultation({
+          initialResult: data,
+          walletAddress: address,
+          setLiveTrace,
+          setLoadingLabel,
+        })
+
+        setLiveTrace(composerResult.processingTrace)
+        setResult(composerResult)
+        await refreshBalance()
+        return
+      }
+
       setLiveTrace((prev) => mergeTrace(prev, data.processingTrace))
-      setResult(data)
+      setResult(data as OracleResult)
       await refreshBalance()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The Oracle is silent. Try again.')
@@ -104,6 +130,8 @@ export default function OraclePage() {
         prompt,
         artifact_text: result.artifact,
         artifact_image: result.artifactImage ?? null,
+        audio_url_1: result.audioUrl1 ?? null,
+        audio_url_2: result.audioUrl2 ?? null,
         tx_hash: result.txHash ?? null,
         processing_trace: liveTrace.length ? liveTrace : result.processingTrace,
         created_at: result.timestamp,
@@ -148,7 +176,7 @@ export default function OraclePage() {
                   disabled={isLoading || !prompt.trim() || !isConnected}
                   className="bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors"
                 >
-                  {isLoading ? 'Consulting…' : `Pay ${oracle.fee} & Consult`}
+                  {isLoading ? (oracleId === 'composer' ? loadingLabel : 'Consulting…') : `Pay ${oracle.fee} & Consult`}
                 </button>
               </div>
               {error && <p className="text-red-500 text-xs mt-3">{error}</p>}
@@ -156,6 +184,22 @@ export default function OraclePage() {
                 <p className="text-navy/50 text-xs mt-3">
                   <Link href="/" className="text-accent underline">Sign in</Link> to consult the Oracle.
                 </p>
+              )}
+              {oracleId === 'composer' && isLoading && loadingLabel === 'Linking to Smol…' && (
+                <p className="text-navy/55 text-xs mt-3">
+                  The Composer needs one more passkey assertion to link this wallet to Smol. This
+                  should only happen once per active Smol session.
+                </p>
+              )}
+              {oracleId === 'composer' && isLoading && liveTrace.length > 0 && (
+                <div className="mt-6">
+                  <TraceTimeline
+                    steps={liveTrace}
+                    title="Full execution trace"
+                    variant="full"
+                    defaultExpanded={true}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -232,6 +276,83 @@ export default function OraclePage() {
       </div>
     </div>
   )
+}
+
+function isComposerPendingResult(
+  result: OracleConsultResponse,
+): result is ComposerPendingResult {
+  return 'status' in result && result.status === 'pending'
+}
+
+function isComposerAuthRequiredResult(
+  result: OracleConsultResponse,
+): result is ComposerAuthRequiredResult {
+  return 'status' in result && result.status === 'smol-auth-required'
+}
+
+function isComposerErrorResult(
+  result: OracleConsultResponse,
+): result is ComposerErrorResult {
+  return 'status' in result && result.status === 'error'
+}
+
+async function resolveComposerConsultation({
+  initialResult,
+  walletAddress,
+  setLiveTrace,
+  setLoadingLabel,
+}: {
+  initialResult: OracleConsultResponse
+  walletAddress: string
+  setLiveTrace: (updater: ProcessingTraceStep[] | ((prev: ProcessingTraceStep[]) => ProcessingTraceStep[])) => void
+  setLoadingLabel: (label: string) => void
+}): Promise<OracleResult> {
+  let current: OracleConsultResponse = initialResult
+
+  while (isComposerAuthRequiredResult(current)) {
+    setLiveTrace(current.processingTrace)
+    setLoadingLabel('Linking to Smol…')
+    await ensureSmolAuth(walletAddress)
+
+    if (!current.txHash) {
+      throw new Error('Composer payment hash missing after Smol auth was requested.')
+    }
+
+    current = await resumeComposerJob(walletAddress, current.txHash)
+  }
+
+  if (isComposerErrorResult(current)) {
+    setLiveTrace(current.processingTrace)
+    throw new Error(current.error)
+  }
+
+  if (isComposerPendingResult(current)) {
+    setLiveTrace(current.processingTrace)
+    setLoadingLabel('Composing… (up to 6 minutes)')
+
+    while (isComposerPendingResult(current)) {
+      await delay(5000)
+      current = await pollComposerJob(current.jobId)
+
+      if ('processingTrace' in current) {
+        setLiveTrace(current.processingTrace)
+      }
+
+      if (isComposerErrorResult(current)) {
+        throw new Error(current.error)
+      }
+    }
+  }
+
+  if ('status' in current) {
+    throw new Error('Composer did not return a completed artifact.')
+  }
+
+  return current
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function advancePublicTrace(

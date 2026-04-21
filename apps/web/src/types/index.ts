@@ -74,6 +74,9 @@ export interface Consultation {
   prompt: string
   artifact_text: string
   artifact_image?: string | null
+  audio_url_1?: string | null
+  audio_url_2?: string | null
+  smol_job_id?: string | null
   tx_hash: string | null
   processing_trace: ProcessingTraceStep[]
   fingerprint?: string | null
