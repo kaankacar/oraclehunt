@@ -9,10 +9,11 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { paymentMiddleware } from '@x402/hono'
 import { buildPaymentRoutes, buildResourceServer } from './middleware/payment'
-import { handleComposerOracle, pollComposerStatus, resumeComposerOracle } from './oracles/composer'
-import { handleOracle } from './oracles/handler'
+import { handleComposerOracle, pollComposerStatus, reconcileComposerSettlement, resumeComposerOracle } from './oracles/composer'
+import { attachOracleSettlement, applyPaymentSettlementToTrace, handleOracle } from './oracles/handler'
 import { createHiddenOracleChallenge, handleHiddenOracle } from './oracles/hidden'
 import { fundTestnetWallet } from './faucet'
+import { getTxExplorerUrl } from './stellar'
 import type { Env, OracleId, OracleRequest } from './types'
 
 const VALID_ORACLE_IDS: OracleId[] = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant']
@@ -49,6 +50,10 @@ function createComposerPaymentReference(rawPaymentHeader: string | null, settled
   return `payref:${digest}`
 }
 
+function isConfirmedStellarTxHash(value: string | undefined): value is string {
+  return Boolean(value && /^[0-9a-f]{64}$/i.test(value))
+}
+
 // CORS — expose x402 headers so the browser can read them
 app.use('*', async (c, next) => {
   const origin = c.env.ADMIN_CORS_ORIGIN ?? '*'
@@ -70,6 +75,74 @@ app.onError((err, c) => {
       'Access-Control-Expose-Headers': 'PAYMENT-REQUIRED,PAYMENT-RESPONSE,X-PAYMENT-RESPONSE',
     },
   )
+})
+
+app.use('/oracle/:id', async (c, next) => {
+  if (
+    c.req.method !== 'POST'
+    || c.req.path === '/oracle/composer/resume'
+    || c.req.path.startsWith('/oracle/composer/status/')
+  ) {
+    return next()
+  }
+
+  const oracleId = c.req.param('id')
+  await next()
+
+  if (c.res.status >= 400 || oracleId === 'hidden') {
+    return
+  }
+
+  const settledTxHash = extractPaymentTransactionHash(
+    c.res.headers.get('PAYMENT-RESPONSE') ?? c.res.headers.get('X-PAYMENT-RESPONSE'),
+  )
+  if (!isConfirmedStellarTxHash(settledTxHash)) {
+    return
+  }
+
+  const contentType = c.res.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    return
+  }
+
+  const payload = await c.res.clone().json().catch(() => null) as Record<string, unknown> | null
+  if (!payload) {
+    return
+  }
+
+  if (oracleId === 'composer') {
+    const provisionalPaymentRef = typeof payload.txHash === 'string' ? payload.txHash : undefined
+    await reconcileComposerSettlement(c.env, provisionalPaymentRef, settledTxHash)
+
+    payload.txHash = settledTxHash
+    payload.explorerUrl = getTxExplorerUrl(c.env, settledTxHash)
+    if (Array.isArray(payload.processingTrace)) {
+      payload.processingTrace = applyPaymentSettlementToTrace(
+        c.env,
+        payload.processingTrace as never,
+        settledTxHash,
+        'The x402 USDC payment settled before the Smol workflow began.',
+      )
+    }
+  } else {
+    const consultationId = c.res.headers.get('X-Oracle-Consultation-Id')
+    if (!consultationId) {
+      return
+    }
+
+    const settlement = await attachOracleSettlement(consultationId, settledTxHash, c.env)
+    payload.txHash = settledTxHash
+    payload.explorerUrl = settlement.explorerUrl
+    payload.processingTrace = settlement.processingTrace
+  }
+
+  const headers = new Headers(c.res.headers)
+  headers.delete('content-length')
+  headers.delete('X-Oracle-Consultation-Id')
+  c.res = new Response(JSON.stringify(payload), {
+    status: c.res.status,
+    headers,
+  })
 })
 
 // x402 payment middleware on all public Oracle routes
@@ -225,12 +298,8 @@ app.post('/oracle/:id', async (c) => {
     return c.json({ error: 'Prompt too long (max 1000 characters)' }, 400)
   }
 
-  const txHash = extractPaymentTransactionHash(
-    c.res.headers.get('PAYMENT-RESPONSE') ?? c.res.headers.get('X-PAYMENT-RESPONSE'),
-  )
   const composerPaymentRef = createComposerPaymentReference(
     c.req.header('PAYMENT-SIGNATURE') ?? c.req.header('X-PAYMENT') ?? null,
-    txHash,
   )
 
   try {
@@ -240,8 +309,10 @@ app.post('/oracle/:id', async (c) => {
       return c.json(result, status)
     }
 
-    const result = await handleOracle(oracleId, body, c.env, txHash)
-    return c.json(result)
+    const result = await handleOracle(oracleId, body, c.env)
+    const { consultationId, ...publicResult } = result
+    c.header('X-Oracle-Consultation-Id', consultationId)
+    return c.json(publicResult)
   } catch (err) {
     console.error('Oracle error:', err)
     const message = err instanceof Error ? err.message : 'The Oracle is silent.'

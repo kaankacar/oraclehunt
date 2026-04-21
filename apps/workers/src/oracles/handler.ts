@@ -23,6 +23,10 @@ interface GeminiResponse {
   error?: { message: string }
 }
 
+export interface PersistedOracleResponse extends OracleResponse {
+  consultationId: string
+}
+
 async function geminiText(apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
   const res = await fetch(`${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
@@ -71,7 +75,7 @@ export async function handleOracle(
   req: OracleRequest,
   env: Env,
   txHash?: string,
-): Promise<OracleResponse> {
+): Promise<PersistedOracleResponse> {
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
   const { data: wallet, error: walletError } = await supabase
     .from('wallets')
@@ -126,19 +130,91 @@ export async function handleOracle(
     },
   ]
 
-  const { error: insertError } = await supabase.from('consultations').insert({
-    wallet_id: wallet.id,
-    oracle_id: oracleId,
-    prompt: req.prompt,
-    artifact_text: artifact,
-    artifact_image: artifactImage ?? null,
-    tx_hash: txHash ?? null,
-    processing_trace: processingTrace,
-  })
+  const { data: inserted, error: insertError } = await supabase
+    .from('consultations')
+    .insert({
+      wallet_id: wallet.id,
+      oracle_id: oracleId,
+      prompt: req.prompt,
+      artifact_text: artifact,
+      artifact_image: artifactImage ?? null,
+      tx_hash: txHash ?? null,
+      processing_trace: processingTrace,
+    })
+    .select('id')
+    .single()
 
-  if (insertError) {
-    throw new Error(`Failed to persist consultation: ${insertError.message}`)
+  if (insertError || !inserted) {
+    throw new Error(`Failed to persist consultation: ${insertError?.message ?? 'unknown error'}`)
   }
 
-  return { artifact, artifactImage, oracleId, txHash, explorerUrl, processingTrace, timestamp }
+  return {
+    artifact,
+    artifactImage,
+    oracleId,
+    txHash,
+    explorerUrl,
+    processingTrace,
+    timestamp,
+    consultationId: inserted.id as string,
+  }
+}
+
+export function applyPaymentSettlementToTrace(
+  env: Env,
+  processingTrace: ProcessingTraceStep[],
+  txHash: string,
+  detail = 'The sponsored x402 USDC payment was confirmed before the oracle responded.',
+): ProcessingTraceStep[] {
+  const explorerUrl = getTxExplorerUrl(env, txHash)
+
+  return processingTrace.map((step) => (
+    step.id === 'payment-settled'
+      ? {
+          ...step,
+          status: 'success',
+          detail,
+          txHash,
+          links: [{ label: 'Open payment on Stellar Expert', url: explorerUrl }],
+        }
+      : step
+  ))
+}
+
+export async function attachOracleSettlement(
+  consultationId: string,
+  txHash: string,
+  env: Env,
+): Promise<{ explorerUrl: string; processingTrace: ProcessingTraceStep[] }> {
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+  const { data, error } = await supabase
+    .from('consultations')
+    .select('processing_trace')
+    .eq('id', consultationId)
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to load consultation for settlement update: ${error?.message ?? 'unknown error'}`)
+  }
+
+  const processingTrace = applyPaymentSettlementToTrace(
+    env,
+    (data.processing_trace as ProcessingTraceStep[] | null) ?? [],
+    txHash,
+  )
+  const explorerUrl = getTxExplorerUrl(env, txHash)
+
+  const { error: updateError } = await supabase
+    .from('consultations')
+    .update({
+      tx_hash: txHash,
+      processing_trace: processingTrace,
+    })
+    .eq('id', consultationId)
+
+  if (updateError) {
+    throw new Error(`Failed to persist settlement metadata: ${updateError.message}`)
+  }
+
+  return { explorerUrl, processingTrace }
 }

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { getTxExplorerUrl } from '../stellar'
+import { applyPaymentSettlementToTrace } from './handler'
 import type {
   ComposerAuthRequiredResponse,
   ComposerErrorResponse,
@@ -675,6 +676,59 @@ export async function pollComposerStatus(
       explorerUrl: isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined,
       processingTrace,
       timestamp: nowIso(),
+    }
+  }
+}
+
+export async function reconcileComposerSettlement(
+  env: Env,
+  provisionalPaymentRef: string | undefined,
+  settledTxHash: string,
+): Promise<void> {
+  if (!provisionalPaymentRef || provisionalPaymentRef === settledTxHash) return
+
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+
+  const { error: sessionError } = await supabase
+    .from('composer_sessions')
+    .update({
+      tx_hash: settledTxHash,
+      updated_at: nowIso(),
+    })
+    .eq('tx_hash', provisionalPaymentRef)
+
+  if (sessionError) {
+    throw new Error(`Failed to reconcile composer session settlement: ${sessionError.message}`)
+  }
+
+  const { data: consultations, error: consultationsError } = await supabase
+    .from('consultations')
+    .select('id, processing_trace')
+    .eq('oracle_id', 'composer')
+    .eq('tx_hash', provisionalPaymentRef)
+
+  if (consultationsError) {
+    throw new Error(`Failed to load composer consultations for settlement reconciliation: ${consultationsError.message}`)
+  }
+
+  for (const consultation of consultations ?? []) {
+    const processingTrace = applyPaymentSettlementToTrace(
+      env,
+      (consultation.processing_trace as ProcessingTraceStep[] | null) ?? [],
+      settledTxHash,
+      'The x402 USDC payment settled before the Smol workflow began.',
+    )
+
+    const { error: updateError } = await supabase
+      .from('consultations')
+      .update({
+        tx_hash: settledTxHash,
+        processing_trace: processingTrace,
+      })
+      .eq('id', consultation.id)
+
+    if (updateError) {
+      throw new Error(`Failed to update composer consultation settlement metadata: ${updateError.message}`)
     }
   }
 }
