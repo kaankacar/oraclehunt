@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useWallet } from '@/components/WalletProvider'
 import { truncateAddress } from '@/lib/wallet'
 
 const IS_MAINNET = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
 
 export default function LandingPage() {
+  const router = useRouter()
   const {
     address,
     username,
@@ -20,24 +22,43 @@ export default function LandingPage() {
     isConnected,
     isLoading,
   } = useWallet()
+
+  const [showGate, setShowGate] = useState(false)
+  const [videoEnded, setVideoEnded] = useState(false)
   const [nextUsername, setNextUsername] = useState('')
   const [error, setError] = useState('')
   const [activeAction, setActiveAction] = useState<'connect' | 'create' | 'profile' | null>(null)
-  const router = useRouter()
+
+  const hoverSoundRef = useRef<HTMLAudioElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  const playHoverSound = useCallback(() => {
+    if (!hoverSoundRef.current) {
+      hoverSoundRef.current = new Audio('/sounds/crystal_synth.mp3')
+      hoverSoundRef.current.volume = 0.5
+    }
+    hoverSoundRef.current.currentTime = 0
+    hoverSoundRef.current.play().catch(() => {})
+  }, [])
+
+  const handleVideoEnd = useCallback(() => {
+    setVideoEnded(true)
+  }, [])
+
+  const handleEnter = useCallback(() => {
+    setShowGate(true)
+  }, [])
 
   async function handleConnect() {
     if (isConnected && !needsProfile) {
       router.push('/marketplace')
       return
     }
-
     setError('')
     setActiveAction('connect')
     try {
       const result = await connectPasskey()
-      if (!result.requiresUsername) {
-        router.push('/marketplace')
-      }
+      if (!result.requiresUsername) router.push('/marketplace')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect passkey wallet.')
     } finally {
@@ -50,9 +71,7 @@ export default function LandingPage() {
     setActiveAction('create')
     try {
       const result = await createPasskeyWallet()
-      if (!result.requiresUsername) {
-        router.push('/marketplace')
-      }
+      if (!result.requiresUsername) router.push('/marketplace')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create passkey wallet.')
     } finally {
@@ -63,14 +82,11 @@ export default function LandingPage() {
   async function handleKnownWalletConnect(contractId: string) {
     const wallet = knownWallets.find((entry) => entry.contractId === contractId)
     if (!wallet) return
-
     setError('')
     setActiveAction('connect')
     try {
       const result = await connectKnownWallet(wallet)
-      if (!result.requiresUsername) {
-        router.push('/marketplace')
-      }
+      if (!result.requiresUsername) router.push('/marketplace')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reconnect wallet.')
     } finally {
@@ -83,7 +99,6 @@ export default function LandingPage() {
       setError('Choose a public username.')
       return
     }
-
     setError('')
     setActiveAction('profile')
     try {
@@ -97,132 +112,281 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-light-blue flex flex-col items-center justify-center px-4">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(200,193,255,0.4),_transparent_34%),radial-gradient(circle_at_20%_25%,_rgba(97,87,255,0.12),_transparent_24%),radial-gradient(circle_at_80%_15%,_rgba(23,22,31,0.06),_transparent_22%)]" />
+    <div className="fixed inset-0 overflow-hidden">
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        onEnded={handleVideoEnd}
+        className="absolute inset-0 h-full w-full object-cover"
+        poster="/images/carnival-entrance-poster.png"
+      >
+        <source src="/videos/carnival_entrance.mp4" type="video/mp4" />
+      </video>
 
-      {/* Ambient field */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {Array.from({ length: 60 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-accent/20 rounded-full"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              opacity: Math.random() * 0.35 + 0.08,
-            }}
-          />
-        ))}
-      </div>
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(180deg, rgba(5,2,10,0.4) 0%, rgba(5,2,10,0.2) 30%, rgba(5,2,10,0.2) 60%, rgba(5,2,10,0.6) 100%)',
+        }}
+      />
 
-      <div className="relative z-10 text-center max-w-lg">
-        <div className="text-6xl mb-6">🔮</div>
-        <h1 className="text-5xl font-bold text-navy mb-4 tracking-tight">Oracle Hunt</h1>
-        <p className="text-navy/70 text-lg mb-2">
-          Six Oracles await your questions.
-        </p>
-        <p className="text-navy/45 text-sm mb-12">
-          Pay. Ask. Collect. Find the one that is hidden.
-        </p>
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ boxShadow: 'inset 0 0 200px 80px rgba(5,2,10,0.7)' }}
+      />
 
-        {needsProfile ? (
-          <div className="bg-white/72 backdrop-blur rounded-2xl p-8 border border-navy/10 shadow-[0_24px_60px_rgba(23,22,31,0.08)]">
-            <p className="text-navy/78 text-sm mb-2">
-              Your wallet is connected. Choose the public username that will appear in the leaderboard and gallery.
-            </p>
-            {address && (
-              <p className="text-navy/40 text-xs font-mono mb-4">
-                {truncateAddress(address)}
-              </p>
-            )}
-            <input
-              type="text"
-              placeholder="choose-a-username"
-              value={nextUsername}
-              onChange={(e) => setNextUsername(e.target.value.toLowerCase())}
-              onKeyDown={(e) => e.key === 'Enter' && handleCompleteProfile()}
-              className="w-full bg-white/75 border border-navy/15 text-navy placeholder-navy/35 rounded-lg px-4 py-3 text-sm mb-4 focus:outline-none focus:border-accent"
+      <div className="relative z-10 flex h-full flex-col items-center justify-end pb-16 md:pb-24 px-6">
+        <motion.h1
+          className="relative text-center mb-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1.5, delay: 0.5 }}
+        >
+          {[...Array(8)].map((_, i) => (
+            <motion.span
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full"
+              style={{
+                left: `${10 + i * 12}%`,
+                top: `${i % 2 === 0 ? -10 : 110}%`,
+                boxShadow: '0 0 6px 2px rgba(255,255,255,0.8), 0 0 12px 4px rgba(157,78,221,0.5)',
+              }}
+              animate={{
+                opacity: [0, 1, 0],
+                scale: [0, 1, 0],
+                y: [0, i % 2 === 0 ? -8 : 8, 0],
+              }}
+              transition={{
+                duration: 2 + i * 0.2,
+                repeat: Infinity,
+                delay: i * 0.3,
+                ease: 'easeInOut',
+              }}
             />
-            {error && <p className="text-red-400 text-xs mb-4">{error}</p>}
-            <button
-              onClick={handleCompleteProfile}
-              disabled={isLoading}
-              className="w-full bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+          ))}
+          <span
+            className="block text-3xl md:text-4xl lg:text-5xl font-semibold tracking-[0.15em] font-title"
+            style={{
+              color: 'rgba(255,255,255,0.9)',
+              textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 0 40px rgba(157,78,221,0.3)',
+            }}
+          >
+            Midnight Midway
+          </span>
+        </motion.h1>
+
+        <motion.p
+          className="text-center font-body text-sm md:text-base max-w-md mb-8"
+          style={{
+            color: 'rgba(255,255,255,0.5)',
+            textShadow: '0 2px 12px rgba(0,0,0,0.9)',
+          }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1.5, delay: 1 }}
+        >
+          Seven hosts await beyond the threshold
+        </motion.p>
+
+        <AnimatePresence mode="wait">
+          {!showGate && videoEnded && (
+            <motion.button
+              key="enter-button"
+              onClick={handleEnter}
+              onMouseEnter={playHoverSound}
+              className="group relative px-12 py-4 font-body text-xs tracking-[0.25em] uppercase"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              {isLoading && activeAction === 'profile' ? 'Saving username…' : 'Join Oracle Hunt'}
-            </button>
-            <p className="text-navy/40 text-xs mt-4">
-              Usernames are public. Use lowercase letters, numbers, hyphens, or underscores.
-            </p>
-          </div>
-        ) : !isConnected ? (
-          <div className="bg-white/72 backdrop-blur rounded-2xl p-8 border border-navy/10 shadow-[0_24px_60px_rgba(23,22,31,0.08)]">
-            <p className="text-navy/78 text-sm mb-4">
-              Connect an existing passkey wallet, or create one if you are new.
-            </p>
-            {error && <p className="text-red-400 text-xs mb-4">{error}</p>}
-            <div className="space-y-3">
-              <button
-                onClick={handleConnect}
-                disabled={isLoading}
-                className="w-full bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+              <EnterFrame />
+              <span
+                className="relative z-10 font-bold transition-colors duration-500 group-hover:text-white/90"
+                style={{ color: 'rgba(255,255,255,0.7)' }}
               >
-                {isLoading && activeAction === 'connect' ? 'Connecting wallet…' : 'Connect Passkey Wallet'}
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={isLoading}
-                className="w-full border border-navy/15 text-navy hover:bg-white/70 disabled:opacity-50 font-semibold py-3 rounded-lg transition-colors"
-              >
-                {isLoading && activeAction === 'create' ? 'Creating wallet…' : 'Create New Wallet'}
-              </button>
-            </div>
-            {knownWallets.length > 0 && (
-              <div className="mt-6 text-left">
-                <p className="text-navy/45 text-xs uppercase tracking-wide mb-3">
-                  Recent wallets on this device
-                </p>
-                <div className="space-y-2">
-                  {knownWallets.map((wallet) => (
-                    <button
-                      key={wallet.contractId}
-                      onClick={() => handleKnownWalletConnect(wallet.contractId)}
-                      disabled={isLoading}
-                      className="w-full flex items-center justify-between rounded-lg border border-navy/10 bg-white/55 px-4 py-3 text-left hover:bg-white/80 disabled:opacity-50 transition-colors"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-navy text-sm">
-                          {wallet.username ? `@${wallet.username}` : 'Unnamed wallet'}
-                        </span>
-                        <span className="block text-navy/40 text-xs font-mono">
-                          {truncateAddress(wallet.contractId)}
-                        </span>
-                      </span>
-                      <span className="text-accent text-xs">Reconnect</span>
-                    </button>
-                  ))}
+                Enter
+              </span>
+            </motion.button>
+          )}
+
+          {showGate && (
+            <motion.div
+              key="wallet-gate"
+              className="w-full max-w-md"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              {needsProfile ? (
+                <div className="space-y-3 text-center">
+                  <p className="font-body text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                    Your wallet is connected. Choose a public username.
+                  </p>
+                  {address && (
+                    <p className="font-mono text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      {truncateAddress(address)}
+                    </p>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="choose-a-username"
+                    value={nextUsername}
+                    onChange={(e) => setNextUsername(e.target.value.toLowerCase())}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCompleteProfile()}
+                    className="w-full bg-white/5 border border-white/20 text-white placeholder-white/30 px-4 py-3 text-sm font-body backdrop-blur-sm focus:outline-none focus:border-white/50"
+                  />
+                  {error && <p className="text-red-400 text-xs">{error}</p>}
+                  <GateButton
+                    onClick={handleCompleteProfile}
+                    onMouseEnter={playHoverSound}
+                    disabled={isLoading}
+                    label={isLoading && activeAction === 'profile' ? 'Saving…' : 'Join Oracle Hunt'}
+                  />
                 </div>
-              </div>
-            )}
-            <p className="text-navy/40 text-xs mt-4">
-              Uses your device biometrics. No password required.
-              {!IS_MAINNET ? ' New testnet wallets receive 2 USDC automatically.' : ''}
-            </p>
-          </div>
-        ) : (
-          <div className="text-center">
-            <p className="text-navy/70 text-sm mb-6">
-              Welcome back{username ? `, ${username}` : ', seeker'}.
-            </p>
-            <button
-              onClick={() => router.push('/marketplace')}
-              className="bg-accent hover:bg-accent-light text-white font-semibold px-8 py-3 rounded-lg transition-colors"
-            >
-              Enter the Oracle Market
-            </button>
-          </div>
-        )}
+              ) : !isConnected ? (
+                <div className="space-y-3">
+                  {error && <p className="text-red-400 text-xs text-center">{error}</p>}
+                  <GateButton
+                    onClick={handleConnect}
+                    onMouseEnter={playHoverSound}
+                    disabled={isLoading}
+                    label={isLoading && activeAction === 'connect' ? 'Connecting…' : 'Connect Passkey Wallet'}
+                  />
+                  <GateButton
+                    onClick={handleCreate}
+                    onMouseEnter={playHoverSound}
+                    disabled={isLoading}
+                    label={isLoading && activeAction === 'create' ? 'Creating…' : 'Create New Wallet'}
+                  />
+                  {knownWallets.length > 0 && (
+                    <div className="pt-4 space-y-2">
+                      <p
+                        className="text-center font-body text-[10px] uppercase tracking-[0.25em]"
+                        style={{ color: 'rgba(255,255,255,0.4)' }}
+                      >
+                        Recent wallets
+                      </p>
+                      {knownWallets.map((wallet) => (
+                        <button
+                          key={wallet.contractId}
+                          onClick={() => handleKnownWalletConnect(wallet.contractId)}
+                          disabled={isLoading}
+                          className="w-full flex items-center justify-between px-4 py-2 border border-white/10 bg-white/5 backdrop-blur-sm text-left hover:bg-white/10 disabled:opacity-50 transition-colors"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-white/80 text-sm font-body">
+                              {wallet.username ? `@${wallet.username}` : 'Unnamed wallet'}
+                            </span>
+                            <span className="block text-white/40 text-xs font-mono">
+                              {truncateAddress(wallet.contractId)}
+                            </span>
+                          </span>
+                          <span className="text-white/60 text-xs uppercase tracking-wider">Reconnect</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p
+                    className="text-center font-body text-[10px] uppercase tracking-[0.25em] pt-2"
+                    style={{ color: 'rgba(255,255,255,0.3)' }}
+                  >
+                    Uses your device biometrics
+                    {!IS_MAINNET ? ' · testnet wallets receive 2 USDC' : ''}
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center space-y-4">
+                  <p className="font-body text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                    Welcome back{username ? `, ${username}` : ', seeker'}.
+                  </p>
+                  <GateButton
+                    onClick={() => router.push('/marketplace')}
+                    onMouseEnter={playHoverSound}
+                    label="Enter the Oracle Market"
+                  />
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
+  )
+}
+
+function EnterFrame() {
+  return (
+    <>
+      <div
+        className="absolute inset-0 transition-all duration-500"
+        style={{ border: '1px solid rgba(255,255,255,0.15)' }}
+      />
+      <div
+        className="absolute inset-[4px] transition-all duration-500"
+        style={{ border: '1px solid rgba(255,255,255,0.25)' }}
+      />
+      <div className="absolute top-0 left-0 w-4 h-4">
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-white/60 to-transparent" />
+        <div className="absolute top-0 left-0 h-full w-[1px] bg-gradient-to-b from-white/60 to-transparent" />
+        <div className="absolute top-[2px] left-[2px] w-1 h-1 bg-white/40 rounded-full" />
+      </div>
+      <div className="absolute top-0 right-0 w-4 h-4">
+        <div className="absolute top-0 right-0 w-full h-[1px] bg-gradient-to-l from-white/60 to-transparent" />
+        <div className="absolute top-0 right-0 h-full w-[1px] bg-gradient-to-b from-white/60 to-transparent" />
+        <div className="absolute top-[2px] right-[2px] w-1 h-1 bg-white/40 rounded-full" />
+      </div>
+      <div className="absolute bottom-0 left-0 w-4 h-4">
+        <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-white/60 to-transparent" />
+        <div className="absolute bottom-0 left-0 h-full w-[1px] bg-gradient-to-t from-white/60 to-transparent" />
+        <div className="absolute bottom-[2px] left-[2px] w-1 h-1 bg-white/40 rounded-full" />
+      </div>
+      <div className="absolute bottom-0 right-0 w-4 h-4">
+        <div className="absolute bottom-0 right-0 w-full h-[1px] bg-gradient-to-l from-white/60 to-transparent" />
+        <div className="absolute bottom-0 right-0 h-full w-[1px] bg-gradient-to-t from-white/60 to-transparent" />
+        <div className="absolute bottom-[2px] right-[2px] w-1 h-1 bg-white/40 rounded-full" />
+      </div>
+      <div className="absolute top-1/2 left-0 w-2 h-[1px] -translate-y-1/2 bg-gradient-to-r from-white/40 to-transparent" />
+      <div className="absolute top-1/2 right-0 w-2 h-[1px] -translate-y-1/2 bg-gradient-to-l from-white/40 to-transparent" />
+      <div
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ boxShadow: '0 0 30px rgba(157,78,221,0.3), inset 0 0 20px rgba(157,78,221,0.1)' }}
+      />
+    </>
+  )
+}
+
+function GateButton({
+  onClick,
+  onMouseEnter,
+  disabled,
+  label,
+}: {
+  onClick: () => void
+  onMouseEnter?: () => void
+  disabled?: boolean
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      disabled={disabled}
+      className="group relative w-full px-12 py-4 font-body text-xs tracking-[0.25em] uppercase disabled:opacity-50"
+    >
+      <EnterFrame />
+      <span
+        className="relative z-10 font-bold transition-colors duration-500 group-hover:text-white/90"
+        style={{ color: 'rgba(255,255,255,0.7)' }}
+      >
+        {label}
+      </span>
+    </button>
   )
 }
