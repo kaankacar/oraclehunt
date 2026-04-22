@@ -8,7 +8,7 @@ export function Nav() {
   const pathname = usePathname()
   const { address, displayAddress, balance, username, isConnected, logout } = useWallet()
 
-  if (pathname === '/') return null
+  if (pathname === '/' || pathname === '/midway') return null
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-navy border-b border-accent/30">
