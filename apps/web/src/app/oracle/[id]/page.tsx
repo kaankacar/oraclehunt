@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type CSSProperties } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ORACLES, type OracleMeta, type Consultation, type ProcessingTraceStep } from '@/types'
@@ -122,6 +122,22 @@ export default function OraclePage() {
     informant: '// 🕵️ //',
   }
 
+  const themedOracles = {
+    seer: {
+      rgb: '255, 45, 149',
+      background: '/images/seerimage.png',
+      icon: '/images/crystal_ball.png',
+      iconAlt: 'Crystal ball',
+    },
+    painter: {
+      rgb: '0, 229, 255',
+      background: '/images/painter_background.png',
+      icon: '/images/paintingicon.png',
+      iconAlt: "Painter's palette",
+    },
+  } as const
+  const themed = themedOracles[oracleId as keyof typeof themedOracles] ?? null
+
   const resultConsultation = result
     ? ({
         id: `latest:${result.timestamp}`,
@@ -139,18 +155,23 @@ export default function OraclePage() {
     : null
 
   return (
-    <div className="relative max-w-5xl mx-auto px-4 py-12">
-      {oracleId === 'seer' && (
-        <div
-          className="fixed inset-0 -z-10 bg-cover bg-center pointer-events-none"
-          style={{ backgroundImage: "url('/images/seerimage.png')" }}
-        />
+    <div
+      className="relative max-w-5xl mx-auto px-4 py-12"
+      style={themed ? ({ '--theme-rgb': themed.rgb } as CSSProperties) : undefined}
+    >
+      {themed && (
+        <>
+          <div
+            className="fixed inset-0 -z-10 bg-cover bg-center pointer-events-none"
+            style={{ backgroundImage: `url('${themed.background}')` }}
+          />
+          <div className="fixed inset-0 -z-10 bg-black/50 pointer-events-none" />
+        </>
       )}
-      {oracleId === 'seer' && <div className="fixed inset-0 -z-10 bg-black/50 pointer-events-none" />}
       <Link
         href="/midway"
         className={
-          oracleId === 'seer'
+          themed
             ? 'fixed top-6 left-6 z-50 text-white/90 hover:text-white text-sm font-body transition-colors drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]'
             : 'text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors'
         }
@@ -159,29 +180,29 @@ export default function OraclePage() {
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
-        <div className={oracleId === 'seer' ? 'md:pl-16 lg:pl-24' : ''}>
+        <div className={themed ? 'md:pl-16 lg:pl-24' : ''}>
           <div className="text-center mb-10">
             <p className="font-mono text-navy/40 text-sm mb-4 tracking-widest">
               {oracleAscii[oracleId] ?? oracle.emoji}
             </p>
-            {oracleId === 'seer' ? (
+            {themed ? (
               <img
-                src="/images/crystal_ball.png"
-                alt="Crystal ball"
-                className="mx-auto mb-3 h-24 w-24 object-contain animate-seer-orb"
+                src={themed.icon}
+                alt={themed.iconAlt}
+                className="mx-auto mb-3 h-24 w-24 object-contain animate-oracle-orb"
               />
             ) : (
               <div className="text-5xl mb-3">{oracle.emoji}</div>
             )}
             <h1
               className={
-                oracleId === 'seer'
+                themed
                   ? 'font-title text-4xl md:text-5xl font-semibold tracking-[0.15em] text-white/90 mb-2'
                   : 'text-3xl font-bold text-navy mb-1'
               }
               style={
-                oracleId === 'seer'
-                  ? { textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 0 40px rgba(255,45,149,0.3)' }
+                themed
+                  ? { textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 0 40px rgba(var(--theme-rgb), 0.3)' }
                   : undefined
               }
             >
@@ -189,7 +210,7 @@ export default function OraclePage() {
             </h1>
             <p
               className={
-                oracleId === 'seer'
+                themed
                   ? 'font-title text-white/90 text-base md:text-lg tracking-[0.1em] mb-2'
                   : 'text-accent text-sm font-medium mb-2'
               }
@@ -204,14 +225,14 @@ export default function OraclePage() {
           {!result && (
             <div
               className={
-                oracleId === 'seer'
-                  ? 'relative rounded-2xl border border-seer/30 bg-midnight/55 backdrop-blur-md p-6 shadow-[0_0_40px_rgba(255,45,149,0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(255,45,149,0.08)]'
+                themed
+                  ? 'relative rounded-2xl border border-[rgba(var(--theme-rgb),0.3)] bg-midnight/55 backdrop-blur-md p-6 shadow-[0_0_40px_rgba(var(--theme-rgb),0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(var(--theme-rgb),0.08)]'
                   : 'bg-white rounded-2xl border border-accent/15 p-6 shadow-sm'
               }
             >
               <p
                 className={
-                  oracleId === 'seer'
+                  themed
                     ? 'text-chrome-bright/75 text-sm mb-4 italic font-body tracking-wide'
                     : 'text-navy/60 text-sm mb-4 italic'
                 }
@@ -225,15 +246,15 @@ export default function OraclePage() {
                 rows={4}
                 maxLength={1000}
                 className={
-                  oracleId === 'seer'
-                    ? 'w-full rounded-lg px-4 py-3 text-sm resize-none mb-4 bg-black/40 border border-seer/25 text-chrome-bright placeholder-chrome-dim/60 focus:outline-none focus:border-seer/60 focus:shadow-[0_0_18px_rgba(255,45,149,0.35)] font-body transition-all'
+                  themed
+                    ? 'w-full rounded-lg px-4 py-3 text-sm resize-none mb-4 bg-black/40 border border-[rgba(var(--theme-rgb),0.25)] text-chrome-bright placeholder-chrome-dim/60 focus:outline-none focus:border-[rgba(var(--theme-rgb),0.6)] focus:shadow-[0_0_18px_rgba(var(--theme-rgb),0.35)] font-body transition-all'
                     : 'w-full border border-navy/20 rounded-lg px-4 py-3 text-sm text-navy placeholder-navy/30 resize-none focus:outline-none focus:border-accent mb-4'
                 }
               />
               <div className="flex items-center justify-between">
                 <span
                   className={
-                    oracleId === 'seer'
+                    themed
                       ? 'text-xs text-chrome-dim/70 font-mono tracking-wider'
                       : 'text-xs text-navy/30 font-mono'
                   }
@@ -244,8 +265,8 @@ export default function OraclePage() {
                   onClick={handleConsult}
                   disabled={isLoading || !prompt.trim() || !isConnected}
                   className={
-                    oracleId === 'seer'
-                      ? 'bg-seer/80 hover:bg-seer disabled:opacity-40 text-midnight font-semibold px-6 py-2.5 rounded-lg transition-all shadow-[0_0_20px_rgba(255,45,149,0.45)] hover:shadow-[0_0_28px_rgba(255,45,149,0.6)] tracking-wide'
+                    themed
+                      ? 'bg-[rgba(var(--theme-rgb),0.8)] hover:bg-[rgb(var(--theme-rgb))] disabled:opacity-40 text-midnight font-semibold px-6 py-2.5 rounded-lg transition-all shadow-[0_0_20px_rgba(var(--theme-rgb),0.45)] hover:shadow-[0_0_28px_rgba(var(--theme-rgb),0.6)] tracking-wide'
                       : 'bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors'
                   }
                 >
@@ -253,15 +274,19 @@ export default function OraclePage() {
                 </button>
               </div>
               {error && (
-                <p className={oracleId === 'seer' ? 'text-seer/90 text-xs mt-3' : 'text-red-500 text-xs mt-3'}>
+                <p className={themed ? 'text-[rgba(var(--theme-rgb),0.9)] text-xs mt-3' : 'text-red-500 text-xs mt-3'}>
                   {error}
                 </p>
               )}
               {!isConnected && (
-                <p className={oracleId === 'seer' ? 'text-chrome-dim/80 text-xs mt-3' : 'text-navy/50 text-xs mt-3'}>
+                <p className={themed ? 'text-chrome-dim/80 text-xs mt-3' : 'text-navy/50 text-xs mt-3'}>
                   <Link
                     href="/"
-                    className={oracleId === 'seer' ? 'text-seer/90 underline hover:text-seer' : 'text-accent underline'}
+                    className={
+                      themed
+                        ? 'text-[rgba(var(--theme-rgb),0.9)] underline hover:text-[rgb(var(--theme-rgb))]'
+                        : 'text-accent underline'
+                    }
                   >
                     Sign in
                   </Link>{' '}
