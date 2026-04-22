@@ -1,23 +1,35 @@
-"use client";
+'use client'
 
-import { motion } from "framer-motion";
+import { motion, type HTMLMotionProps } from 'framer-motion'
 
 interface ScanlinesProps {
-  className?: string;
-  opacity?: number;
-  animate?: boolean;
+  className?: string
+  opacity?: number
+  animate?: boolean
 }
 
 export default function Scanlines({
-  className = "",
+  className = '',
   opacity = 0.03,
   animate = true,
 }: ScanlinesProps) {
+  const animationProps: Pick<HTMLMotionProps<'div'>, 'animate' | 'transition'> = animate
+    ? {
+        animate: { y: [0, 4] },
+        transition: {
+          duration: 0.15,
+          repeat: Infinity,
+          repeatType: 'reverse',
+          ease: 'linear',
+        },
+      }
+    : {}
+
   return (
     <motion.div
       className={`pointer-events-none ${className}`}
       style={{
-        position: "absolute",
+        position: 'absolute',
         inset: 0,
         background: `repeating-linear-gradient(
           0deg,
@@ -27,23 +39,7 @@ export default function Scanlines({
           rgba(255, 255, 255, ${opacity}) 4px
         )`,
       }}
-      animate={
-        animate
-          ? {
-              y: [0, 4],
-            }
-          : undefined
-      }
-      transition={
-        animate
-          ? {
-              duration: 0.15,
-              repeat: Infinity,
-              repeatType: "reverse",
-              ease: "linear",
-            }
-          : undefined
-      }
+      {...animationProps}
     />
-  );
+  )
 }
