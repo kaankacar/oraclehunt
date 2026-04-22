@@ -127,12 +127,12 @@ export default function MidwayScene() {
             The Midnight Midway
           </h1>
 
-          <p className="font-body text-chrome-dim text-lg max-w-xl mx-auto">
+          <p className="font-body text-white/90 text-lg max-w-xl mx-auto">
             Explore seven interactive Midway Hosts, each triggered by an x402-powered payment flow.
           </p>
 
           {isConnected && (
-            <p className="font-body text-chrome-dim/70 text-sm mt-3">
+            <p className="font-body text-white/80 text-sm mt-3">
               Codex progress:{' '}
               <span className="text-composer font-semibold">
                 {completionCount} / {PROGRESS_ORACLE_IDS.length}
@@ -153,16 +153,6 @@ export default function MidwayScene() {
           <BoothGrid consulted={consulted} />
         </main>
 
-        <motion.footer
-          className="fixed bottom-0 left-0 right-0 py-4 text-center bg-gradient-to-t from-midnight to-transparent pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1, duration: 0.5 }}
-        >
-          <p className="font-body text-sm text-chrome-dim/60">
-            Whispers say there may be more than meets the eye...
-          </p>
-        </motion.footer>
       </div>
 
       <div className="fixed top-4 left-4 w-12 h-12 border-l border-t border-chrome/10 pointer-events-none" />

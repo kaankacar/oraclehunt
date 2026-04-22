@@ -24,7 +24,6 @@ export default function LandingPage() {
   } = useWallet()
 
   const [showGate, setShowGate] = useState(false)
-  const [videoEnded, setVideoEnded] = useState(false)
   const [nextUsername, setNextUsername] = useState('')
   const [error, setError] = useState('')
   const [activeAction, setActiveAction] = useState<'connect' | 'create' | 'profile' | null>(null)
@@ -39,10 +38,6 @@ export default function LandingPage() {
     }
     hoverSoundRef.current.currentTime = 0
     hoverSoundRef.current.play().catch(() => {})
-  }, [])
-
-  const handleVideoEnd = useCallback(() => {
-    setVideoEnded(true)
   }, [])
 
   const handleEnter = useCallback(() => {
@@ -118,7 +113,6 @@ export default function LandingPage() {
         autoPlay
         muted
         playsInline
-        onEnded={handleVideoEnd}
         className="absolute inset-0 h-full w-full object-cover"
         poster="/images/carnival-entrance-poster.png"
       >
@@ -192,7 +186,7 @@ export default function LandingPage() {
         </motion.p>
 
         <AnimatePresence mode="wait">
-          {!showGate && videoEnded && (
+          {!showGate && (
             <motion.button
               key="enter-button"
               onClick={handleEnter}
@@ -201,7 +195,7 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.8 }}
+              transition={{ duration: 1.2, delay: 2.5 }}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
