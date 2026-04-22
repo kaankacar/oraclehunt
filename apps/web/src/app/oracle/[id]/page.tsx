@@ -135,6 +135,12 @@ export default function OraclePage() {
       icon: '/images/paintingicon.png',
       iconAlt: "Painter's palette",
     },
+    composer: {
+      rgb: '157, 78, 221',
+      background: '/images/composerbackground.png',
+      icon: '/images/musicicon.png',
+      iconAlt: 'Composer note',
+    },
   } as const
   const themed = themedOracles[oracleId as keyof typeof themedOracles] ?? null
 
