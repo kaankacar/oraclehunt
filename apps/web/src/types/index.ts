@@ -8,6 +8,16 @@ export interface OracleMeta {
   fee: string
   description: string
   locked?: boolean
+
+  // Midnight Midway design fields
+  title?: string
+  longDescription?: string
+  color?: string
+  glowClass?: string
+  textGlowClass?: string
+  icon?: string
+  image?: string
+  isBonus?: boolean
 }
 
 export const ORACLES: OracleMeta[] = [
@@ -17,7 +27,14 @@ export const ORACLES: OracleMeta[] = [
     specialty: 'Personalized prophecies',
     emoji: '🔮',
     fee: '$0.10',
-    description: 'Describe yourself and receive a grand, poetic prophecy for the year ahead.',
+    description: 'A prophet machine that gathers a few details about you and returns a grand, poetic glimpse of the year ahead.',
+    title: 'Host of Prophecy',
+    longDescription: 'A masked prophecy automaton draped in velvet darkness. Holographic sigils pulse with magenta light as ancient algorithms divine what lies ahead. Step closer, if you dare to know.',
+    color: '#ff2d95',
+    glowClass: 'glow-seer',
+    textGlowClass: 'text-glow-seer',
+    icon: '👁',
+    image: '/images/the_seer.png',
   },
   {
     id: 'painter',
@@ -25,7 +42,14 @@ export const ORACLES: OracleMeta[] = [
     specialty: 'Pixel portrait in words',
     emoji: '🎨',
     fee: '$0.10',
-    description: 'Describe a person or scene and receive a vivid pixel-art portrait.',
+    description: 'A pixel-forging portraitist that turns a person, place, or passing thought into a vivid scene.',
+    title: 'Host of Portraits',
+    longDescription: 'Part arcade cabinet, part forge altar. Cyan sparks fly as holographic pixels assemble on an ethereal easel. The Painter sees not your face, but your essence—and renders it in light.',
+    color: '#00e5ff',
+    glowClass: 'glow-painter',
+    textGlowClass: 'text-glow-painter',
+    icon: '🎨',
+    image: '/images/the_painter.png',
   },
   {
     id: 'composer',
@@ -33,7 +57,14 @@ export const ORACLES: OracleMeta[] = [
     specialty: 'Original song hooks',
     emoji: '🎵',
     fee: '$0.15',
-    description: 'Name a theme and receive a hook, bridge, and first verse of an original song.',
+    description: 'A melody-spinning midway musician that transforms a theme into an original tune.',
+    title: 'Host of Melodies',
+    longDescription: 'A melody-spinning carnival bandleader machine. Chrome calliope meets synth organ as violet and cyan pulses dance through pneumatic tubes. Your anthem awaits composition.',
+    color: '#9d4edd',
+    glowClass: 'glow-composer',
+    textGlowClass: 'text-glow-composer',
+    icon: '🎵',
+    image: '/images/the_composer.png',
   },
   {
     id: 'scribe',
@@ -41,7 +72,14 @@ export const ORACLES: OracleMeta[] = [
     specialty: 'Haiku & short poetry',
     emoji: '📜',
     fee: '$0.05',
-    description: 'Tell it anything. It responds only in haiku.',
+    description: 'A quiet poetic automaton that listens closely, then answers only in haiku.',
+    title: 'Host of Words',
+    longDescription: 'A poetic stenographer automaton of quiet precision. Amber light pools on ancient mechanisms as delicate paper charms emerge, inscribed with verses meant only for you.',
+    color: '#ffb347',
+    glowClass: 'glow-scribe',
+    textGlowClass: 'text-glow-scribe',
+    icon: '✒',
+    image: '/images/the_scribe2.png',
   },
   {
     id: 'scholar',
@@ -49,7 +87,14 @@ export const ORACLES: OracleMeta[] = [
     specialty: 'Stellar trivia & lore',
     emoji: '📚',
     fee: '$0.10',
-    description: 'Ask about Stellar, SDF, or Lumens. Answers arrive as ancient scrolls.',
+    description: 'An archival keeper of Stellar lore that responds to questions with facts and explanations.',
+    title: 'Host of Knowledge',
+    longDescription: 'A relic librarian and lore-keeper of cosmic truths. Scroll vaults glow with blue-gold archival light as the celestial filing system retrieves wisdom from across the stellar expanse.',
+    color: '#4a9eff',
+    glowClass: 'glow-scholar',
+    textGlowClass: 'text-glow-scholar',
+    icon: '📚',
+    image: '/images/the_scholar.png',
   },
   {
     id: 'informant',
@@ -57,9 +102,35 @@ export const ORACLES: OracleMeta[] = [
     specialty: 'Cryptic clues',
     emoji: '🕵️',
     fee: '$0.15',
-    description: 'Speaks in riddles. Hidden in its answers: the clue to the Hidden Oracle.',
+    description: 'A sly whisper-machine that never speaks plainly; every answer is a riddle, and every riddle hides a clue.',
+    title: 'Host of Secrets',
+    longDescription: 'A sly trickster clue-machine dwelling in perpetual shadow. Glitch flickers reveal fragmented signage and mirrored surfaces. What it offers may lead you somewhere... unexpected.',
+    color: '#39ff14',
+    glowClass: 'glow-informant',
+    textGlowClass: 'text-glow-informant',
+    icon: '🔮',
+    image: '/images/the_informant.png',
   },
 ]
+
+export const HIDDEN_ORACLE: OracleMeta = {
+  id: 'hidden',
+  name: 'The Hidden Host',
+  specialty: 'Sacred proofs',
+  emoji: '🗝️',
+  fee: '???',
+  description: 'A secret proof chamber of sacred-tech geometry. Clean silver-white light emanates from within, but the way is concealed. Only those who seek shall find.',
+  locked: true,
+  title: 'Host of Proofs',
+  longDescription: 'A secret chamber of proof and verification, revealed only to those who uncover the phrase and complete the trial.',
+  color: '#f0f0ff',
+  glowClass: 'glow-oracle',
+  textGlowClass: 'text-glow-oracle',
+  icon: '✧',
+  image: '/images/hidden_oracle.png',
+}
+
+export const ALL_ORACLES: OracleMeta[] = [...ORACLES, HIDDEN_ORACLE]
 
 export const PROGRESS_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar'] as const
 

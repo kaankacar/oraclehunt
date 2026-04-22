@@ -16,6 +16,8 @@
     "@stellar/stellar-sdk": "14.6.1",
     "@supabase/ssr": "^0.3.0",
     "@supabase/supabase-js": "^2.43.0",
+    "@tsparticles/react": "^3.0.0",
+    "@tsparticles/slim": "^3.9.1",
     "@x402/fetch": "^2.9.0",
     "@x402/stellar": "^2.9.0",
     "ffjavascript": "^0.3.1",
