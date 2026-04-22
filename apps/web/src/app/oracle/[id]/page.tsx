@@ -139,50 +139,133 @@ export default function OraclePage() {
     : null
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
-      <Link href="/midway" className="text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors">
+    <div className="relative max-w-5xl mx-auto px-4 py-12">
+      {oracleId === 'seer' && (
+        <div
+          className="fixed inset-0 -z-10 bg-cover bg-center pointer-events-none"
+          style={{ backgroundImage: "url('/images/seerimage.png')" }}
+        />
+      )}
+      {oracleId === 'seer' && <div className="fixed inset-0 -z-10 bg-black/50 pointer-events-none" />}
+      <Link
+        href="/midway"
+        className={
+          oracleId === 'seer'
+            ? 'fixed top-6 left-6 z-50 text-white/90 hover:text-white text-sm font-body transition-colors drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]'
+            : 'text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors'
+        }
+      >
         ← Back to the Midway
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
-        <div>
+        <div className={oracleId === 'seer' ? 'md:pl-16 lg:pl-24' : ''}>
           <div className="text-center mb-10">
             <p className="font-mono text-navy/40 text-sm mb-4 tracking-widest">
               {oracleAscii[oracleId] ?? oracle.emoji}
             </p>
-            <div className="text-5xl mb-3">{oracle.emoji}</div>
-            <h1 className="text-3xl font-bold text-navy mb-1">{oracle.name}</h1>
-            <p className="text-accent text-sm font-medium mb-2">{oracle.specialty}</p>
+            {oracleId === 'seer' ? (
+              <img
+                src="/images/crystal_ball.png"
+                alt="Crystal ball"
+                className="mx-auto mb-3 h-24 w-24 object-contain animate-seer-orb"
+              />
+            ) : (
+              <div className="text-5xl mb-3">{oracle.emoji}</div>
+            )}
+            <h1
+              className={
+                oracleId === 'seer'
+                  ? 'font-title text-4xl md:text-5xl font-semibold tracking-[0.15em] text-white/90 mb-2'
+                  : 'text-3xl font-bold text-navy mb-1'
+              }
+              style={
+                oracleId === 'seer'
+                  ? { textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 0 40px rgba(255,45,149,0.3)' }
+                  : undefined
+              }
+            >
+              {oracle.name}
+            </h1>
+            <p
+              className={
+                oracleId === 'seer'
+                  ? 'font-title text-white/90 text-base md:text-lg tracking-[0.1em] mb-2'
+                  : 'text-accent text-sm font-medium mb-2'
+              }
+            >
+              {oracle.specialty}
+            </p>
             <span className="bg-light-blue text-accent font-mono text-sm font-semibold px-3 py-1 rounded">
               {oracle.fee} USDC per consultation
             </span>
           </div>
 
           {!result && (
-            <div className="bg-white rounded-2xl border border-accent/15 p-6 shadow-sm">
-              <p className="text-navy/60 text-sm mb-4 italic">{oracle.description}</p>
+            <div
+              className={
+                oracleId === 'seer'
+                  ? 'relative rounded-2xl border border-seer/30 bg-midnight/55 backdrop-blur-md p-6 shadow-[0_0_40px_rgba(255,45,149,0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(255,45,149,0.08)]'
+                  : 'bg-white rounded-2xl border border-accent/15 p-6 shadow-sm'
+              }
+            >
+              <p
+                className={
+                  oracleId === 'seer'
+                    ? 'text-chrome-bright/75 text-sm mb-4 italic font-body tracking-wide'
+                    : 'text-navy/60 text-sm mb-4 italic'
+                }
+              >
+                {oracle.description}
+              </p>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={getPlaceholder(oracleId)}
                 rows={4}
                 maxLength={1000}
-                className="w-full border border-navy/20 rounded-lg px-4 py-3 text-sm text-navy placeholder-navy/30 resize-none focus:outline-none focus:border-accent mb-4"
+                className={
+                  oracleId === 'seer'
+                    ? 'w-full rounded-lg px-4 py-3 text-sm resize-none mb-4 bg-black/40 border border-seer/25 text-chrome-bright placeholder-chrome-dim/60 focus:outline-none focus:border-seer/60 focus:shadow-[0_0_18px_rgba(255,45,149,0.35)] font-body transition-all'
+                    : 'w-full border border-navy/20 rounded-lg px-4 py-3 text-sm text-navy placeholder-navy/30 resize-none focus:outline-none focus:border-accent mb-4'
+                }
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-navy/30 font-mono">{prompt.length}/1000</span>
+                <span
+                  className={
+                    oracleId === 'seer'
+                      ? 'text-xs text-chrome-dim/70 font-mono tracking-wider'
+                      : 'text-xs text-navy/30 font-mono'
+                  }
+                >
+                  {prompt.length}/1000
+                </span>
                 <button
                   onClick={handleConsult}
                   disabled={isLoading || !prompt.trim() || !isConnected}
-                  className="bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors"
+                  className={
+                    oracleId === 'seer'
+                      ? 'bg-seer/80 hover:bg-seer disabled:opacity-40 text-midnight font-semibold px-6 py-2.5 rounded-lg transition-all shadow-[0_0_20px_rgba(255,45,149,0.45)] hover:shadow-[0_0_28px_rgba(255,45,149,0.6)] tracking-wide'
+                      : 'bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors'
+                  }
                 >
                   {isLoading ? (oracleId === 'composer' ? loadingLabel : 'Consulting…') : `Pay ${oracle.fee} & Consult`}
                 </button>
               </div>
-              {error && <p className="text-red-500 text-xs mt-3">{error}</p>}
+              {error && (
+                <p className={oracleId === 'seer' ? 'text-seer/90 text-xs mt-3' : 'text-red-500 text-xs mt-3'}>
+                  {error}
+                </p>
+              )}
               {!isConnected && (
-                <p className="text-navy/50 text-xs mt-3">
-                  <Link href="/" className="text-accent underline">Sign in</Link> to consult the Oracle.
+                <p className={oracleId === 'seer' ? 'text-chrome-dim/80 text-xs mt-3' : 'text-navy/50 text-xs mt-3'}>
+                  <Link
+                    href="/"
+                    className={oracleId === 'seer' ? 'text-seer/90 underline hover:text-seer' : 'text-accent underline'}
+                  >
+                    Sign in
+                  </Link>{' '}
+                  to consult the Oracle.
                 </p>
               )}
               {oracleId === 'composer' && isLoading && loadingLabel === 'Linking to Smol…' && (
