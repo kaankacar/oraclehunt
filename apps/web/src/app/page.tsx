@@ -51,14 +51,14 @@ export default function LandingPage() {
 
   async function handleConnect() {
     if (isConnected && !needsProfile) {
-      router.push('/marketplace')
+      router.push('/midway')
       return
     }
     setError('')
     setActiveAction('connect')
     try {
       const result = await connectPasskey()
-      if (!result.requiresUsername) router.push('/marketplace')
+      if (!result.requiresUsername) router.push('/midway')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect passkey wallet.')
     } finally {
@@ -71,7 +71,7 @@ export default function LandingPage() {
     setActiveAction('create')
     try {
       const result = await createPasskeyWallet()
-      if (!result.requiresUsername) router.push('/marketplace')
+      if (!result.requiresUsername) router.push('/midway')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create passkey wallet.')
     } finally {
@@ -86,7 +86,7 @@ export default function LandingPage() {
     setActiveAction('connect')
     try {
       const result = await connectKnownWallet(wallet)
-      if (!result.requiresUsername) router.push('/marketplace')
+      if (!result.requiresUsername) router.push('/midway')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reconnect wallet.')
     } finally {
@@ -103,7 +103,7 @@ export default function LandingPage() {
     setActiveAction('profile')
     try {
       await completeProfile(nextUsername)
-      router.push('/marketplace')
+      router.push('/midway')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save username.')
     } finally {
@@ -307,7 +307,7 @@ export default function LandingPage() {
                     Welcome back{username ? `, ${username}` : ', seeker'}.
                   </p>
                   <GateButton
-                    onClick={() => router.push('/marketplace')}
+                    onClick={() => router.push('/midway')}
                     onMouseEnter={playHoverSound}
                     label="Enter the Oracle Market"
                   />
