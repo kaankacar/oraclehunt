@@ -11,6 +11,30 @@
   --accent-rgb: 97, 87, 255;
   --accent-light: #c8c1ff;
   --light-blue: #f6f0e8;
+
+  /* Midnight Midway theme tokens */
+  --midnight: #0a0a12;
+  --midnight-light: #12121f;
+  --midnight-lighter: #1a1a2e;
+  --velvet: #1a1025;
+  --velvet-light: #2a1a3a;
+  --chrome: #c0c0d0;
+  --chrome-bright: #e8e8f0;
+  --chrome-dim: #8080a0;
+  --seer: #ff2d95;
+  --seer-glow: #ff2d9540;
+  --painter: #00e5ff;
+  --painter-glow: #00e5ff40;
+  --composer: #9d4edd;
+  --composer-glow: #9d4edd40;
+  --scribe: #ffb347;
+  --scribe-glow: #ffb34740;
+  --scholar: #4a9eff;
+  --scholar-glow: #4a9eff40;
+  --informant: #39ff14;
+  --informant-glow: #39ff1440;
+  --oracle-color: #f0f0ff;
+  --oracle-glow: #f0f0ff40;
 }
 
 body {
@@ -120,3 +144,107 @@ body {
 ::-webkit-scrollbar-track { background: var(--light-blue); }
 ::-webkit-scrollbar-thumb { background: rgba(var(--navy-rgb), 0.2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-rgb), 0.55); }
+
+/* =========================================================
+   Midnight Midway theme utilities
+   ========================================================= */
+
+/* Glow box-shadows per oracle */
+.glow-seer { box-shadow: 0 0 20px var(--seer-glow), 0 0 40px var(--seer-glow); }
+.glow-painter { box-shadow: 0 0 20px var(--painter-glow), 0 0 40px var(--painter-glow); }
+.glow-composer { box-shadow: 0 0 20px var(--composer-glow), 0 0 40px var(--composer-glow); }
+.glow-scribe { box-shadow: 0 0 20px var(--scribe-glow), 0 0 40px var(--scribe-glow); }
+.glow-scholar { box-shadow: 0 0 20px var(--scholar-glow), 0 0 40px var(--scholar-glow); }
+.glow-informant { box-shadow: 0 0 20px var(--informant-glow), 0 0 40px var(--informant-glow); }
+.glow-oracle { box-shadow: 0 0 20px var(--oracle-glow), 0 0 40px var(--oracle-glow); }
+
+/* Text glows per oracle */
+.text-glow-seer { text-shadow: 0 0 10px var(--seer-glow), 0 0 20px var(--seer-glow); }
+.text-glow-painter { text-shadow: 0 0 10px var(--painter-glow), 0 0 20px var(--painter-glow); }
+.text-glow-composer { text-shadow: 0 0 10px var(--composer-glow), 0 0 20px var(--composer-glow); }
+.text-glow-scribe { text-shadow: 0 0 10px var(--scribe-glow), 0 0 20px var(--scribe-glow); }
+.text-glow-scholar { text-shadow: 0 0 10px var(--scholar-glow), 0 0 20px var(--scholar-glow); }
+.text-glow-informant { text-shadow: 0 0 10px var(--informant-glow), 0 0 20px var(--informant-glow); }
+.text-glow-oracle { text-shadow: 0 0 10px var(--oracle-glow), 0 0 20px var(--oracle-glow); }
+
+@keyframes neon-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.neon-pulse { animation: neon-pulse 2s ease-in-out infinite; }
+
+@keyframes flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% { opacity: 1; }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% { opacity: 0.4; }
+}
+.flicker { animation: flicker 3s infinite; }
+
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 4px
+  );
+  pointer-events: none;
+}
+
+.fog-gradient {
+  background: radial-gradient(
+    ellipse at center bottom,
+    rgba(26, 16, 37, 0.8) 0%,
+    transparent 70%
+  );
+}
+
+.chrome-text {
+  background: linear-gradient(
+    180deg,
+    var(--chrome-bright) 0%,
+    var(--chrome) 50%,
+    var(--chrome-dim) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes holographic {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.holographic {
+  background: linear-gradient(
+    90deg,
+    var(--seer),
+    var(--painter),
+    var(--composer),
+    var(--seer)
+  );
+  background-size: 300% 100%;
+  animation: holographic 3s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@keyframes sparkle-drift {
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(-10px) rotate(180deg); }
+}
+.sparkle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.8),
+              0 0 12px 4px rgba(157, 78, 221, 0.5);
+  animation: sparkle 2s ease-in-out infinite, sparkle-drift 3s ease-in-out infinite alternate;
+}
