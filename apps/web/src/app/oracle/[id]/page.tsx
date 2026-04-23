@@ -19,6 +19,7 @@ import {
 import { getOracleHistory } from '@/lib/supabase'
 import { ArtifactCard } from '@/components/ArtifactCard'
 import { TraceTimeline } from '@/components/TraceTimeline'
+import MidwayNav from '@/components/midway/MidwayNav'
 
 const PUBLIC_TRACE_TEMPLATE: ProcessingTraceStep[] = [
   {
@@ -113,15 +114,6 @@ export default function OraclePage() {
     }
   }
 
-  const oracleAscii: Record<string, string> = {
-    seer: '✦ ✦ ✦  👁  ✦ ✦ ✦',
-    painter: '▓▒░ 🎨 ░▒▓',
-    composer: '♩ ♪ ♫ 🎵 ♫ ♪ ♩',
-    scribe: '— 📜 —',
-    scholar: '⌗ 📚 ⌗',
-    informant: '// 🕵️ //',
-  }
-
   const themedOracles = {
     seer: {
       rgb: '255, 45, 149',
@@ -180,7 +172,7 @@ export default function OraclePage() {
 
   return (
     <div
-      className="relative max-w-5xl mx-auto px-4 py-12"
+      className="relative max-w-5xl mx-auto px-4 pt-24 pb-12"
       style={themed ? ({ '--theme-rgb': themed.rgb } as CSSProperties) : undefined}
     >
       {themed && (
@@ -192,29 +184,11 @@ export default function OraclePage() {
           <div className="fixed inset-0 -z-10 bg-black/50 pointer-events-none" />
         </>
       )}
-      <Link
-        href="/midway"
-        className={
-          themed
-            ? 'fixed top-6 left-6 z-50 text-white/90 hover:text-white text-sm font-body transition-colors drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]'
-            : 'text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors'
-        }
-      >
-        ← Back to the Midway
-      </Link>
+      <MidwayNav backHref="/midway" backLabel="Back to the Midway" />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
         <div className={themed ? 'md:pl-16 lg:pl-24' : ''}>
           <div className="text-center mb-10">
-            <p
-              className={
-                themed
-                  ? 'font-mono text-[rgba(var(--theme-rgb),0.7)] text-sm mb-4 tracking-widest drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]'
-                  : 'font-mono text-navy/40 text-sm mb-4 tracking-widest'
-              }
-            >
-              {oracleAscii[oracleId] ?? oracle.emoji}
-            </p>
             {themed ? (
               <img
                 src={themed.icon}
@@ -227,7 +201,7 @@ export default function OraclePage() {
             <h1
               className={
                 themed
-                  ? 'font-title text-4xl md:text-5xl font-semibold tracking-[0.15em] text-white/90 mb-2'
+                  ? 'font-title text-4xl md:text-5xl lg:text-6xl font-semibold tracking-[0.1em] text-white/90 mb-2'
                   : 'text-3xl font-bold text-navy mb-1'
               }
               style={
@@ -326,7 +300,7 @@ export default function OraclePage() {
                   >
                     Sign in
                   </Link>{' '}
-                  to consult the Oracle.
+                  to consult the Host.
                 </p>
               )}
               {oracleId === 'composer' && isLoading && loadingLabel === 'Linking to Smol…' && (
@@ -572,5 +546,5 @@ function getPlaceholder(oracleId: string): string {
     scholar: "Ask about Stellar, SDF, Lumens, or the blockchain…",
     informant: "Ask me anything. I speak only in riddles.",
   }
-  return placeholders[oracleId] ?? 'Your message to the Oracle…'
+  return placeholders[oracleId] ?? 'Your message to the Host…'
 }

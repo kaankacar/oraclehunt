@@ -7,6 +7,7 @@ import { consultHiddenOracle, type HiddenOracleResult } from '@/lib/hidden-oracl
 import { type Consultation, type ProcessingTraceStep } from '@/types'
 import { TraceTimeline } from '@/components/TraceTimeline'
 import { ArtifactCard } from '@/components/ArtifactCard'
+import MidwayNav from '@/components/midway/MidwayNav'
 
 const HIDDEN_THEME_RGB = '232, 192, 110'
 
@@ -126,7 +127,7 @@ export default function HiddenOraclePage() {
 
   return (
     <div
-      className="relative max-w-3xl mx-auto px-4 py-12"
+      className="relative max-w-3xl mx-auto px-4 pt-24 pb-12"
       style={{ '--theme-rgb': HIDDEN_THEME_RGB } as CSSProperties}
     >
       <div
@@ -135,12 +136,7 @@ export default function HiddenOraclePage() {
       />
       <div className="fixed inset-0 -z-10 bg-black/50 pointer-events-none" />
 
-      <Link
-        href="/midway"
-        className="fixed top-6 left-6 z-50 text-white/90 hover:text-white text-sm font-body transition-colors drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]"
-      >
-        ← Back to the Midway
-      </Link>
+      <MidwayNav backHref="/midway" backLabel="Back to the Midway" />
 
       <div className="text-center mb-10 md:pl-16 lg:pl-24">
         <img

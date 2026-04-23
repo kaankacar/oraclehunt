@@ -17,7 +17,7 @@ export default function HiddenOracleHint({ index, hasClue = false }: HiddenOracl
       <motion.div
         className={`group relative h-[480px] w-full overflow-hidden rounded-lg ${hasClue ? 'cursor-pointer' : 'cursor-not-allowed'}`}
         whileHover={{ scale: hasClue ? 1.02 : 1.01, y: hasClue ? -5 : 0 }}
-        whileTap={hasClue ? { scale: 0.98 } : undefined}
+        {...(hasClue ? { whileTap: { scale: 0.98 } } : {})}
         transition={{ duration: 0.3 }}
       >
         {HIDDEN_ORACLE.image && (
