@@ -22,7 +22,7 @@ export default function BoothGrid({ consulted }: BoothGridProps) {
         ))}
 
         <div className="w-full sm:w-[calc(50%-20px)] lg:w-[calc(33.333%-27px)] xl:w-[calc(25%-30px)]">
-          <HiddenOracleHint index={ORACLES.length} />
+          <HiddenOracleHint index={ORACLES.length} hasClue={consulted.has('informant')} />
         </div>
       </div>
     </div>
