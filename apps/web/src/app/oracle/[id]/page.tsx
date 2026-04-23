@@ -141,6 +141,24 @@ export default function OraclePage() {
       icon: '/images/musicicon.png',
       iconAlt: 'Composer note',
     },
+    scribe: {
+      rgb: '255, 179, 71',
+      background: '/images/scribebackground.png',
+      icon: '/images/scrollicon.png',
+      iconAlt: 'Scroll',
+    },
+    scholar: {
+      rgb: '74, 158, 255',
+      background: '/images/scholarbackground.png',
+      icon: '/images/bookicon.png',
+      iconAlt: 'Book',
+    },
+    informant: {
+      rgb: '57, 255, 20',
+      background: '/images/informantbackground.png',
+      icon: '/images/informanticon.png',
+      iconAlt: 'Informant sigil',
+    },
   } as const
   const themed = themedOracles[oracleId as keyof typeof themedOracles] ?? null
 
@@ -360,25 +378,28 @@ export default function OraclePage() {
         </div>
 
         {oracleId === 'informant' && (
-          <aside className="bg-white rounded-2xl border border-accent/15 p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-navy/45 mb-3">
+          <aside className="rounded-2xl border border-[rgba(var(--theme-rgb),0.3)] bg-midnight/55 backdrop-blur-md p-5 shadow-[0_0_40px_rgba(var(--theme-rgb),0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(var(--theme-rgb),0.08)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[rgba(var(--theme-rgb),0.9)] mb-3">
               Previous Informant Answers
             </p>
             {history.length === 0 ? (
-              <p className="text-sm text-navy/45">
+              <p className="text-sm text-chrome-dim/80 font-body">
                 Ask the Informant more than once. Previous riddles will stay here so clue patterns are visible.
               </p>
             ) : (
               <div className="space-y-4">
                 {history.map((entry) => (
-                  <div key={entry.id} className="border-b last:border-b-0 border-accent/10 pb-4 last:pb-0">
-                    <p className="text-xs font-mono text-navy/35 mb-2">
+                  <div
+                    key={entry.id}
+                    className="border-b last:border-b-0 border-[rgba(var(--theme-rgb),0.15)] pb-4 last:pb-0"
+                  >
+                    <p className="text-xs font-mono text-chrome-dim/60 mb-2 tracking-wider">
                       {new Date(entry.created_at).toLocaleString()}
                     </p>
-                    <p className="text-xs italic text-navy/45 whitespace-pre-wrap mb-2">
+                    <p className="text-xs italic text-chrome-dim/80 whitespace-pre-wrap mb-2 font-body">
                       &ldquo;{entry.prompt}&rdquo;
                     </p>
-                    <p className="text-sm text-navy whitespace-pre-wrap leading-relaxed">
+                    <p className="text-sm text-chrome-bright whitespace-pre-wrap leading-relaxed font-body">
                       {entry.artifact_text}
                     </p>
                   </div>
