@@ -124,8 +124,8 @@ export default function HiddenOraclePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-12">
-      <Link href="/marketplace" className="text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors">
-        ← Back to Market
+      <Link href="/midway" className="text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors">
+        ← Back to the Midway
       </Link>
 
       <div className="text-center mb-10">

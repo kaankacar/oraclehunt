@@ -58,7 +58,7 @@ export default function OraclePage() {
 
   useEffect(() => {
     const found = ORACLES.find((entry) => entry.id === oracleId)
-    if (!found) router.push('/marketplace')
+    if (!found) router.push('/midway')
     else setOracle(found)
   }, [oracleId, router])
 
@@ -140,8 +140,8 @@ export default function OraclePage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-12">
-      <Link href="/marketplace" className="text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors">
-        ← Back to Market
+      <Link href="/midway" className="text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors">
+        ← Back to the Midway
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
@@ -228,10 +228,10 @@ export default function OraclePage() {
                     Ask Again
                   </button>
                   <Link
-                    href="/marketplace"
+                    href="/midway"
                     className="text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent-light transition-colors"
                   >
-                    More Oracles
+                    More Hosts
                   </Link>
                   <Link
                     href={`/codex/${address}`}
