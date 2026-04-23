@@ -29,7 +29,6 @@ export default function LandingPage() {
   const [activeAction, setActiveAction] = useState<'connect' | 'create' | 'profile' | null>(null)
 
   const hoverSoundRef = useRef<HTMLAudioElement | null>(null)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const playHoverSound = useCallback(() => {
     if (!hoverSoundRef.current) {
@@ -109,7 +108,6 @@ export default function LandingPage() {
   return (
     <div className="fixed inset-0 overflow-hidden">
       <video
-        ref={videoRef}
         autoPlay
         muted
         playsInline

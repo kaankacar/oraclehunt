@@ -110,7 +110,7 @@ export default function CodexPage() {
         <div className="text-center py-20">
           <p className="text-navy/40 text-sm mb-4">No artifacts yet.</p>
           {isOwner && (
-            <Link href="/marketplace" className="text-accent text-sm underline">
+            <Link href="/midway" className="text-accent text-sm underline">
               Consult your first Oracle →
             </Link>
           )}
