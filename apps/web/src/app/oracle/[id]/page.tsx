@@ -206,7 +206,13 @@ export default function OraclePage() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
         <div className={themed ? 'md:pl-16 lg:pl-24' : ''}>
           <div className="text-center mb-10">
-            <p className="font-mono text-navy/40 text-sm mb-4 tracking-widest">
+            <p
+              className={
+                themed
+                  ? 'font-mono text-[rgba(var(--theme-rgb),0.7)] text-sm mb-4 tracking-widest drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]'
+                  : 'font-mono text-navy/40 text-sm mb-4 tracking-widest'
+              }
+            >
               {oracleAscii[oracleId] ?? oracle.emoji}
             </p>
             {themed ? (
@@ -241,7 +247,13 @@ export default function OraclePage() {
             >
               {oracle.specialty}
             </p>
-            <span className="bg-light-blue text-accent font-mono text-sm font-semibold px-3 py-1 rounded">
+            <span
+              className={
+                themed
+                  ? 'inline-block bg-black/40 border border-[rgba(var(--theme-rgb),0.35)] text-[rgba(var(--theme-rgb),0.95)] font-mono text-sm font-semibold px-3 py-1 rounded tracking-wider backdrop-blur-sm shadow-[0_0_14px_rgba(var(--theme-rgb),0.25)]'
+                  : 'bg-light-blue text-accent font-mono text-sm font-semibold px-3 py-1 rounded'
+              }
+            >
               {oracle.fee} USDC per consultation
             </span>
           </div>
@@ -346,7 +358,9 @@ export default function OraclePage() {
                 defaultExpanded={true}
               />
               <div className="text-center space-y-3">
-                <p className="text-xs text-navy/50">Saved to your Codex</p>
+                <p className={themed ? 'text-xs text-chrome-dim/80 font-body tracking-wider uppercase' : 'text-xs text-navy/50'}>
+                  Saved to your Codex
+                </p>
                 <div className="flex gap-3 justify-center flex-wrap">
                   <button
                     onClick={() => {
@@ -355,19 +369,31 @@ export default function OraclePage() {
                       setLiveTrace([])
                       setError('')
                     }}
-                    className="text-sm border border-accent/30 text-accent px-4 py-2 rounded-lg hover:bg-light-blue transition-colors"
+                    className={
+                      themed
+                        ? 'text-sm border border-[rgba(var(--theme-rgb),0.35)] text-[rgba(var(--theme-rgb),0.95)] px-4 py-2 rounded-lg hover:bg-[rgba(var(--theme-rgb),0.12)] hover:border-[rgba(var(--theme-rgb),0.6)] transition-all backdrop-blur-sm tracking-wide'
+                        : 'text-sm border border-accent/30 text-accent px-4 py-2 rounded-lg hover:bg-light-blue transition-colors'
+                    }
                   >
                     Ask Again
                   </button>
                   <Link
                     href="/midway"
-                    className="text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent-light transition-colors"
+                    className={
+                      themed
+                        ? 'text-sm bg-[rgba(var(--theme-rgb),0.8)] hover:bg-[rgb(var(--theme-rgb))] text-midnight font-semibold px-4 py-2 rounded-lg transition-all shadow-[0_0_18px_rgba(var(--theme-rgb),0.45)] hover:shadow-[0_0_26px_rgba(var(--theme-rgb),0.6)] tracking-wide'
+                        : 'text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent-light transition-colors'
+                    }
                   >
                     More Hosts
                   </Link>
                   <Link
                     href={`/codex/${address}`}
-                    className="text-sm border border-navy/20 text-navy/60 px-4 py-2 rounded-lg hover:bg-light-blue transition-colors"
+                    className={
+                      themed
+                        ? 'text-sm border border-chrome-dim/30 text-chrome-bright/80 px-4 py-2 rounded-lg hover:bg-white/5 hover:border-chrome-dim/60 hover:text-chrome-bright transition-all backdrop-blur-sm tracking-wide'
+                        : 'text-sm border border-navy/20 text-navy/60 px-4 py-2 rounded-lg hover:bg-light-blue transition-colors'
+                    }
                   >
                     My Codex
                   </Link>
