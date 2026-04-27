@@ -3,7 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ORACLES, type OracleMeta, type Consultation, type ProcessingTraceStep } from '@/types'
+import {
+  ORACLES,
+  PERSONALITY_ORACLE_IDS,
+  type OracleMeta,
+  type Consultation,
+  type OraclePersonality,
+  type ProcessingTraceStep,
+} from '@/types'
 import { useWallet } from '@/components/WalletProvider'
 import {
   consultOracle,
@@ -39,6 +46,25 @@ const PUBLIC_TRACE_TEMPLATE: ProcessingTraceStep[] = [
     status: 'pending',
     detail: 'The signed payment is being attached to the request and sent to the oracle worker.',
   },
+  {
+    id: 'client:oracle-processing',
+    label: 'Oracle Processing',
+    status: 'pending',
+    detail: 'The worker is invoking the oracle model and preparing the artifact.',
+  },
+  {
+    id: 'client:supabase-save',
+    label: 'Saving to Codex',
+    status: 'pending',
+    detail: 'The finished artifact will be saved with payment and trace metadata.',
+  },
+]
+
+const PERSONALITIES: Array<{ id: OraclePersonality; label: string }> = [
+  { id: 'default', label: 'Default' },
+  { id: 'sassy', label: 'Sassy' },
+  { id: 'slam_poet', label: 'Slam Poet' },
+  { id: 'crypto_degen', label: 'Crypto Degen' },
 ]
 
 export default function OraclePage() {
@@ -52,6 +78,7 @@ export default function OraclePage() {
   const [result, setResult] = useState<OracleResult | null>(null)
   const [history, setHistory] = useState<Consultation[]>([])
   const [liveTrace, setLiveTrace] = useState<ProcessingTraceStep[]>([])
+  const [personality, setPersonality] = useState<OraclePersonality>('default')
   const [isLoading, setIsLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Consulting…')
   const [error, setError] = useState('')
@@ -84,6 +111,7 @@ export default function OraclePage() {
 
     try {
       const data = await consultOracle(oracleId, prompt, address, {
+        personality,
         onProgress: (event) => {
           setLiveTrace((prev) => advancePublicTrace(prev, event))
         },
@@ -137,6 +165,8 @@ export default function OraclePage() {
         created_at: result.timestamp,
       } as Consultation)
     : null
+  const showPersonalityControls = PERSONALITY_ORACLE_IDS.includes(oracleId as typeof PERSONALITY_ORACLE_IDS[number])
+  const visibleTrace = liveTrace.length ? liveTrace : result?.processingTrace ?? PUBLIC_TRACE_TEMPLATE
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-12">
@@ -161,6 +191,29 @@ export default function OraclePage() {
           {!result && (
             <div className="bg-white rounded-2xl border border-accent/15 p-6 shadow-sm">
               <p className="text-navy/60 text-sm mb-4 italic">{oracle.description}</p>
+              {showPersonalityControls && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-navy/45 mb-2">
+                    Personality
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {PERSONALITIES.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setPersonality(option.id)}
+                        className={`min-h-10 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                          personality === option.id
+                            ? 'border-accent bg-accent text-white'
+                            : 'border-accent/15 bg-light-blue/50 text-navy/65 hover:border-accent/35'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -191,28 +244,12 @@ export default function OraclePage() {
                   should only happen once per active Smol session.
                 </p>
               )}
-              {oracleId === 'composer' && isLoading && liveTrace.length > 0 && (
-                <div className="mt-6">
-                  <TraceTimeline
-                    steps={liveTrace}
-                    title="Full execution trace"
-                    variant="full"
-                    defaultExpanded={true}
-                  />
-                </div>
-              )}
             </div>
           )}
 
           {result && resultConsultation && (
             <div className="mt-6 space-y-5">
               <ArtifactCard consultation={resultConsultation} />
-              <TraceTimeline
-                steps={liveTrace.length ? liveTrace : result.processingTrace}
-                title="Full execution trace"
-                variant="full"
-                defaultExpanded={true}
-              />
               <div className="text-center space-y-3">
                 <p className="text-xs text-navy/50">Saved to your Codex</p>
                 <div className="flex gap-3 justify-center flex-wrap">
@@ -245,34 +282,43 @@ export default function OraclePage() {
           )}
         </div>
 
-        {oracleId === 'informant' && (
-          <aside className="bg-white rounded-2xl border border-accent/15 p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-navy/45 mb-3">
-              Previous Informant Answers
-            </p>
-            {history.length === 0 ? (
-              <p className="text-sm text-navy/45">
-                Ask the Informant more than once. Previous riddles will stay here so clue patterns are visible.
+        <aside className="space-y-5 lg:sticky lg:top-20">
+          <TraceTimeline
+            steps={visibleTrace}
+            title="Live execution trace"
+            variant="compact"
+            defaultExpanded={true}
+          />
+
+          {oracleId === 'informant' && (
+            <div className="bg-white rounded-2xl border border-accent/15 p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-navy/45 mb-3">
+                Previous Informant Answers
               </p>
-            ) : (
-              <div className="space-y-4">
-                {history.map((entry) => (
-                  <div key={entry.id} className="border-b last:border-b-0 border-accent/10 pb-4 last:pb-0">
-                    <p className="text-xs font-mono text-navy/35 mb-2">
-                      {new Date(entry.created_at).toLocaleString()}
-                    </p>
-                    <p className="text-xs italic text-navy/45 whitespace-pre-wrap mb-2">
-                      &ldquo;{entry.prompt}&rdquo;
-                    </p>
-                    <p className="text-sm text-navy whitespace-pre-wrap leading-relaxed">
-                      {entry.artifact_text}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </aside>
-        )}
+              {history.length === 0 ? (
+                <p className="text-sm text-navy/45">
+                  Ask the Informant more than once. Previous riddles will stay here so clue patterns are visible.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {history.map((entry) => (
+                    <div key={entry.id} className="border-b last:border-b-0 border-accent/10 pb-4 last:pb-0">
+                      <p className="text-xs font-mono text-navy/35 mb-2">
+                        {new Date(entry.created_at).toLocaleString()}
+                      </p>
+                      <p className="text-xs italic text-navy/45 whitespace-pre-wrap mb-2">
+                        &ldquo;{entry.prompt}&rdquo;
+                      </p>
+                      <p className="text-sm text-navy whitespace-pre-wrap leading-relaxed">
+                        {entry.artifact_text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   )
@@ -387,6 +433,8 @@ function advancePublicTrace(
   }
 
   if (event === 'oracle-response-received') {
+    markSuccess('client:oracle-processing', 'The worker returned the oracle artifact.')
+    markSuccess('client:supabase-save', 'The artifact was saved with the final worker trace.')
     next.forEach((step) => {
       if (step.status === 'pending') step.status = 'success'
     })

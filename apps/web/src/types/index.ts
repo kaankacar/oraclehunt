@@ -1,4 +1,5 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant' | 'hidden'
+export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
 
 export interface OracleMeta {
   id: OracleId
@@ -62,6 +63,8 @@ export const ORACLES: OracleMeta[] = [
 ]
 
 export const PROGRESS_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar'] as const
+export const PUBLIC_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant'] as const
+export const PERSONALITY_ORACLE_IDS = ['seer', 'scribe', 'scholar', 'informant'] as const
 
 export function isProgressOracleId(oracleId: OracleId | string): oracleId is typeof PROGRESS_ORACLE_IDS[number] {
   return PROGRESS_ORACLE_IDS.includes(oracleId as typeof PROGRESS_ORACLE_IDS[number])
@@ -83,6 +86,15 @@ export interface Consultation {
   zk_contract_id?: string | null
   zk_tx_hash?: string | null
   zk_verify_tx_hash?: string | null
+  payment_amount_usdc?: number | null
+  estimated_model_cost_usdc?: number | null
+  estimated_profit_usdc?: number | null
+  oracle_wallet_address?: string | null
+  ai_provider?: string | null
+  ai_model?: string | null
+  input_tokens?: number | null
+  output_tokens?: number | null
+  total_tokens?: number | null
   created_at: string
 }
 

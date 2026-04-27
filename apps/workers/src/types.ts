@@ -1,4 +1,5 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant'
+export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
 
 export interface Env {
   GEMINI_API_KEY: string
@@ -14,11 +15,21 @@ export interface Env {
   STELLAR_NETWORK: string
   SMOL_API_URL?: string
   ADMIN_CORS_ORIGIN?: string
+  STELLA_API_URL?: string
+  STELLA_API_KEY?: string
+  ORACLE_WALLET_SEER?: string
+  ORACLE_WALLET_PAINTER?: string
+  ORACLE_WALLET_COMPOSER?: string
+  ORACLE_WALLET_SCRIBE?: string
+  ORACLE_WALLET_SCHOLAR?: string
+  ORACLE_WALLET_INFORMANT?: string
+  COMPOSER_ESTIMATED_COST_USDC?: string
 }
 
 export interface OracleRequest {
   prompt: string
   walletAddress: string
+  personality?: OraclePersonality
 }
 
 export interface OracleResponse {

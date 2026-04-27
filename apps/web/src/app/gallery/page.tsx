@@ -6,7 +6,7 @@ import { useWallet } from '@/components/WalletProvider'
 import { ArtifactCard } from '@/components/ArtifactCard'
 import { getGallery, getGalleryArtifacts, castVote, createSupabaseClient } from '@/lib/supabase'
 import { truncateAddress } from '@/lib/wallet'
-import type { Consultation } from '@/types'
+import { ORACLES, type Consultation, type OracleId } from '@/types'
 
 interface GalleryEntry {
   wallet_id: string
@@ -28,6 +28,7 @@ export default function GalleryPage() {
   const [view, setView] = useState<'artifacts' | 'codexes'>('artifacts')
   const [entries, setEntries] = useState<GalleryEntry[]>([])
   const [artifacts, setArtifacts] = useState<GalleryArtifact[]>([])
+  const [oracleFilter, setOracleFilter] = useState<OracleId | 'all'>('all')
   const [votedFor, setVotedFor] = useState<Set<string>>(new Set())
   const [voteMessages, setVoteMessages] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
@@ -81,6 +82,10 @@ export default function GalleryPage() {
     )
   }
 
+  const filteredArtifacts = oracleFilter === 'all'
+    ? artifacts
+    : artifacts.filter((artifact) => artifact.oracle_id === oracleFilter)
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">
       <div className="text-center mb-10">
@@ -117,13 +122,35 @@ export default function GalleryPage() {
       </div>
 
       {view === 'artifacts' ? (
-        artifacts.length === 0 ? (
+        <>
+          <div className="mb-6 flex flex-wrap justify-center gap-2">
+            {[
+              { id: 'all' as const, label: 'All' },
+              ...ORACLES.map((oracle) => ({ id: oracle.id, label: oracle.name.replace('The ', '') })),
+              { id: 'hidden' as const, label: 'Hidden' },
+            ].map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setOracleFilter(filter.id)}
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  oracleFilter === filter.id
+                    ? 'border-accent bg-accent text-white'
+                    : 'border-accent/15 bg-white text-navy/60 hover:border-accent/35'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
+        {filteredArtifacts.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-navy/40">No artifacts yet. Be the first seeker.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {artifacts.map((artifact) => {
+            {filteredArtifacts.map((artifact) => {
               const targetAddress = artifact.stellar_address
               const isMe = targetAddress === address
               const hasVoted = votedFor.has(targetAddress)
@@ -168,6 +195,8 @@ export default function GalleryPage() {
             })}
           </div>
         )
+      }
+        </>
       ) : (
         entries.length === 0 ? (
           <div className="text-center py-20">

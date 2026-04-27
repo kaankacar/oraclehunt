@@ -17,6 +17,7 @@ import { getTxExplorerUrl } from './stellar'
 import type { Env, OracleId, OracleRequest } from './types'
 
 const VALID_ORACLE_IDS: OracleId[] = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant']
+const VALID_PERSONALITIES = new Set(['default', 'sassy', 'slam_poet', 'crypto_degen'])
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -296,6 +297,10 @@ app.post('/oracle/:id', async (c) => {
 
   if (body.prompt.length > 1000) {
     return c.json({ error: 'Prompt too long (max 1000 characters)' }, 400)
+  }
+
+  if (body.personality && !VALID_PERSONALITIES.has(body.personality)) {
+    return c.json({ error: 'Invalid personality' }, 400)
   }
 
   const composerPaymentRef = createComposerPaymentReference(

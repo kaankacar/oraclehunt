@@ -1,7 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import type { Route } from 'next'
 import { useWallet } from './WalletProvider'
+
+const HOW_IT_WORKS_ROUTE = '/how-it-works' as Route
 
 export function Nav() {
   const { address, displayAddress, balance, username, isConnected, logout } = useWallet()
@@ -22,6 +25,9 @@ export function Nav() {
           </Link>
           <Link href="/leaderboard" className="text-white/80 hover:text-white text-sm transition-colors">
             Leaderboard
+          </Link>
+          <Link href={HOW_IT_WORKS_ROUTE} className="text-white/80 hover:text-white text-sm transition-colors">
+            How It Works
           </Link>
           {isConnected && address && (
             <Link href={`/codex/${address}`} className="text-white/80 hover:text-white text-sm transition-colors">

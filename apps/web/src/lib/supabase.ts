@@ -124,6 +124,16 @@ export async function getGalleryArtifacts() {
   return data ?? []
 }
 
+export async function getAgenticEconomy() {
+  const supabase = createSupabaseClient()
+  const { data } = await supabase
+    .from('agentic_economy')
+    .select('*')
+    .order('estimated_profit_usdc', { ascending: false })
+
+  return data ?? []
+}
+
 export async function getPublicDisplayName(stellarAddress: string): Promise<string | null> {
   const supabase = createSupabaseClient()
   const { data: leaderboardEntry } = await supabase

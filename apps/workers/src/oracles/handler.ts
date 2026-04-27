@@ -8,10 +8,15 @@ import type {
   ProcessingTraceStep,
 } from '../types'
 import { getTxExplorerUrl } from '../stellar'
+import { ORACLE_PRICE_USDC, getOracleWalletAddress } from '../middleware/payment'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 const TEXT_MODEL = 'gemini-2.5-flash'
 const IMAGE_MODEL = 'gemini-2.5-flash-image'
+const TEXT_ORACLES_WITH_PERSONALITY = new Set<OracleId>(['seer', 'scribe', 'scholar', 'informant'])
+const GEMINI_FLASH_INPUT_PER_MILLION_USDC = 0.30
+const GEMINI_FLASH_OUTPUT_PER_MILLION_USDC = 2.50
+const GEMINI_IMAGE_ESTIMATED_COST_USDC = 0.039
 
 interface GeminiPart {
   text?: string
@@ -20,14 +25,26 @@ interface GeminiPart {
 
 interface GeminiResponse {
   candidates?: Array<{ content?: { parts?: GeminiPart[] } }>
+  usageMetadata?: {
+    promptTokenCount?: number
+    candidatesTokenCount?: number
+    totalTokenCount?: number
+  }
   error?: { message: string }
+}
+
+interface GeminiTextResult {
+  text: string
+  promptTokenCount?: number
+  candidateTokenCount?: number
+  totalTokenCount?: number
 }
 
 export interface PersistedOracleResponse extends OracleResponse {
   consultationId: string
 }
 
-async function geminiText(apiKey: string, systemPrompt: string, userMessage: string): Promise<string> {
+async function geminiText(apiKey: string, systemPrompt: string, userMessage: string): Promise<GeminiTextResult> {
   const res = await fetch(`${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -38,13 +55,18 @@ async function geminiText(apiKey: string, systemPrompt: string, userMessage: str
   })
   const json = await res.json() as GeminiResponse
   if (json.error) throw new Error(`Gemini error: ${json.error.message}`)
-  return json.candidates?.[0]?.content?.parts?.find(p => p.text)?.text ?? ''
+  return {
+    text: json.candidates?.[0]?.content?.parts?.find(p => p.text)?.text ?? '',
+    promptTokenCount: json.usageMetadata?.promptTokenCount,
+    candidateTokenCount: json.usageMetadata?.candidatesTokenCount,
+    totalTokenCount: json.usageMetadata?.totalTokenCount,
+  }
 }
 
 async function geminiImage(
   apiKey: string,
   prompt: string,
-): Promise<{ text: string; imageDataUrl?: string }> {
+): Promise<GeminiTextResult & { imageDataUrl?: string }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch(`${GEMINI_BASE}/${IMAGE_MODEL}:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -63,11 +85,111 @@ async function geminiImage(
     const imageDataUrl = img ? `data:${img.mimeType};base64,${img.data}` : undefined
 
     if (imageDataUrl) {
-      return { text, imageDataUrl }
+      return {
+        text,
+        imageDataUrl,
+        promptTokenCount: json.usageMetadata?.promptTokenCount,
+        candidateTokenCount: json.usageMetadata?.candidatesTokenCount,
+        totalTokenCount: json.usageMetadata?.totalTokenCount,
+      }
     }
   }
 
   throw new Error('Painter generation returned no image. Please try again.')
+}
+
+function buildPersonalizedPrompt(oracleId: OracleId, basePrompt: string, personality: OracleRequest['personality']): string {
+  if (!personality || personality === 'default' || !TEXT_ORACLES_WITH_PERSONALITY.has(oracleId)) {
+    return basePrompt
+  }
+
+  const layer: Record<'sassy' | 'slam_poet' | 'crypto_degen', string> = {
+    sassy: 'Personality layer: keep the oracle format and guardrails intact, but add dry wit, pointed confidence, and playful bite. Do not become rude or modernize beyond the oracle persona.',
+    slam_poet: 'Personality layer: keep the oracle format and guardrails intact, but make the cadence more rhythmic, spoken-word, and percussive. Preserve required line counts or sentence counts.',
+    crypto_degen: 'Personality layer: keep the oracle format and guardrails intact, but lace the voice with crypto-native energy, market metaphors, and degen confidence. Do not give financial advice.',
+  }
+
+  return `${basePrompt}\n\n${layer[personality]}`
+}
+
+async function getStellaContext(req: OracleRequest, env: Env): Promise<{ context?: string; trace: ProcessingTraceStep }> {
+  if (!env.STELLA_API_URL || !env.STELLA_API_KEY) {
+    return {
+      trace: {
+        id: 'stella-context',
+        label: 'Stella Context Unavailable',
+        status: 'error',
+        detail: 'Stella env vars are not configured, so Scholar continued with Gemini-only context.',
+      },
+    }
+  }
+
+  try {
+    const response = await fetch(env.STELLA_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.STELLA_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: req.prompt, prompt: req.prompt }),
+    })
+    const json = await response.json().catch(() => ({})) as {
+      answer?: string
+      context?: string
+      text?: string
+      result?: string
+    }
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const context = json.context ?? json.answer ?? json.text ?? json.result
+    if (!context?.trim()) throw new Error('empty Stella response')
+
+    return {
+      context,
+      trace: {
+        id: 'stella-context',
+        label: 'Stella Context Retrieved',
+        status: 'success',
+        detail: 'Scholar pulled Stellar-specific context from Stella before Gemini wrote the scroll.',
+      },
+    }
+  } catch (error) {
+    return {
+      trace: {
+        id: 'stella-context',
+        label: 'Stella Context Unavailable',
+        status: 'error',
+        detail: `Scholar continued without Stella context: ${error instanceof Error ? error.message : 'unknown error'}.`,
+      },
+    }
+  }
+}
+
+function estimateGeminiCostUsdc(
+  oracleId: OracleId,
+  usage?: Pick<GeminiTextResult, 'promptTokenCount' | 'candidateTokenCount'>,
+): number {
+  if (oracleId === 'painter') return GEMINI_IMAGE_ESTIMATED_COST_USDC
+
+  const inputTokens = usage?.promptTokenCount ?? 900
+  const outputTokens = usage?.candidateTokenCount ?? 500
+  return Number((
+    (inputTokens / 1_000_000) * GEMINI_FLASH_INPUT_PER_MILLION_USDC
+    + (outputTokens / 1_000_000) * GEMINI_FLASH_OUTPUT_PER_MILLION_USDC
+  ).toFixed(6))
+}
+
+function buildEconomics(env: Env, oracleId: OracleId, estimatedCost: number) {
+  const price = ORACLE_PRICE_USDC[oracleId]
+  return {
+    payment_amount_usdc: price,
+    estimated_model_cost_usdc: estimatedCost,
+    estimated_profit_usdc: Number((price - estimatedCost).toFixed(6)),
+    oracle_wallet_address: getOracleWalletAddress(env, oracleId),
+    ai_provider: 'Google Gemini',
+    ai_model: oracleId === 'painter' ? IMAGE_MODEL : TEXT_MODEL,
+  }
 }
 
 export async function handleOracle(
@@ -89,16 +211,39 @@ export async function handleOracle(
 
   let artifact: string
   let artifactImage: string | undefined
+  let promptTokenCount: number | undefined
+  let candidateTokenCount: number | undefined
+  let totalTokenCount: number | undefined
+  const additionalTrace: ProcessingTraceStep[] = []
 
   if (oracleId === 'painter') {
-    const { text, imageDataUrl } = await geminiImage(
+    const imageResult = await geminiImage(
       env.GEMINI_API_KEY,
       `${PAINTER_IMAGE_PROMPT}\n\nSubject: ${req.prompt}`,
     )
-    artifact = text || 'Your pixel art portrait has been rendered.'
-    artifactImage = imageDataUrl
+    artifact = imageResult.text || 'Your pixel art portrait has been rendered.'
+    artifactImage = imageResult.imageDataUrl
+    promptTokenCount = imageResult.promptTokenCount
+    candidateTokenCount = imageResult.candidateTokenCount
+    totalTokenCount = imageResult.totalTokenCount
   } else {
-    artifact = await geminiText(env.GEMINI_API_KEY, ORACLE_PROMPTS[oracleId], req.prompt)
+    let systemPrompt = buildPersonalizedPrompt(oracleId, ORACLE_PROMPTS[oracleId], req.personality)
+    let userMessage = req.prompt
+
+    if (oracleId === 'scholar') {
+      const stella = await getStellaContext(req, env)
+      additionalTrace.push(stella.trace)
+      if (stella.context) {
+        userMessage = `Seeker question:\n${req.prompt}\n\nStella context to synthesize accurately:\n${stella.context}`
+        systemPrompt = `${systemPrompt}\n\nUse the Stella context as factual grounding. If the context is incomplete, say only what is supported by the context and general Stellar knowledge.`
+      }
+    }
+
+    const textResult = await geminiText(env.GEMINI_API_KEY, systemPrompt, userMessage)
+    artifact = textResult.text
+    promptTokenCount = textResult.promptTokenCount
+    candidateTokenCount = textResult.candidateTokenCount
+    totalTokenCount = textResult.totalTokenCount
   }
 
   const timestamp = new Date().toISOString()
@@ -114,6 +259,7 @@ export async function handleOracle(
       txHash,
       links: explorerUrl ? [{ label: 'Open payment on Stellar Expert', url: explorerUrl }] : undefined,
     },
+    ...additionalTrace,
     {
       id: 'oracle-generated',
       label: 'Oracle Generated Artifact',
@@ -129,6 +275,8 @@ export async function handleOracle(
       detail: 'The consultation was written to Supabase and is visible in Codex, Gallery, and Leaderboard.',
     },
   ]
+  const estimatedModelCost = estimateGeminiCostUsdc(oracleId, { promptTokenCount, candidateTokenCount })
+  const economics = buildEconomics(env, oracleId, estimatedModelCost)
 
   const { data: inserted, error: insertError } = await supabase
     .from('consultations')
@@ -140,6 +288,10 @@ export async function handleOracle(
       artifact_image: artifactImage ?? null,
       tx_hash: txHash ?? null,
       processing_trace: processingTrace,
+      ...economics,
+      input_tokens: promptTokenCount ?? null,
+      output_tokens: candidateTokenCount ?? null,
+      total_tokens: totalTokenCount ?? null,
     })
     .select('id')
     .single()

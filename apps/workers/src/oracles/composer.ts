@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getTxExplorerUrl } from '../stellar'
 import { applyPaymentSettlementToTrace } from './handler'
+import { ORACLE_PRICE_USDC, getOracleWalletAddress } from '../middleware/payment'
 import type {
   ComposerAuthRequiredResponse,
   ComposerErrorResponse,
@@ -98,6 +99,25 @@ function getReadySongUrl(env: Env, song: SmolSong): string {
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+function getComposerEstimatedCostUsdc(env: Env): number {
+  const configured = Number(env.COMPOSER_ESTIMATED_COST_USDC)
+  return Number.isFinite(configured) && configured >= 0 ? configured : 0.06
+}
+
+function buildComposerEconomics(env: Env) {
+  const cost = getComposerEstimatedCostUsdc(env)
+  const price = ORACLE_PRICE_USDC.composer
+
+  return {
+    payment_amount_usdc: price,
+    estimated_model_cost_usdc: cost,
+    estimated_profit_usdc: Number((price - cost).toFixed(6)),
+    oracle_wallet_address: getOracleWalletAddress(env, 'composer'),
+    ai_provider: 'Smol',
+    ai_model: 'smol-composer-workflow',
+  }
 }
 
 function hasUsableSmolJwt(wallet: WalletRow): boolean {
@@ -435,6 +455,7 @@ async function finalizeComposerConsultation(
     smol_job_id: session.smol_job_id,
     tx_hash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : null,
     processing_trace: processingTrace,
+    ...buildComposerEconomics(env),
   }
 
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)

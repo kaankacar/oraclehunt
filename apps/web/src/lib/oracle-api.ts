@@ -7,7 +7,7 @@ import {
   loadWalletFromStorage,
   saveWalletToStorage,
 } from './wallet'
-import type { ProcessingTraceStep } from '@/types'
+import type { OraclePersonality, ProcessingTraceStep } from '@/types'
 
 const WORKERS_URL = process.env.NEXT_PUBLIC_WORKERS_URL ?? 'http://localhost:8787'
 const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
@@ -89,7 +89,7 @@ export async function consultOracle(
   oracleId: string,
   prompt: string,
   walletAddress: string,
-  options?: ProgressOptions,
+  options?: ProgressOptions & { personality?: OraclePersonality },
 ): Promise<OracleConsultResponse> {
   const stored = loadWalletFromStorage()
   if (!stored) throw new Error('No wallet found — please create or reconnect your wallet')
@@ -106,7 +106,7 @@ export async function consultOracle(
     response = await payFetch(`${WORKERS_URL}/oracle/${oracleId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, walletAddress }),
+      body: JSON.stringify({ prompt, walletAddress, personality: options?.personality }),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

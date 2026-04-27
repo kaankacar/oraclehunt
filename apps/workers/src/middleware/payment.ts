@@ -24,6 +24,15 @@ const ORACLE_PRICES: Record<OracleId, string> = {
   informant: '$0.15',
 }
 
+export const ORACLE_PRICE_USDC: Record<OracleId, number> = {
+  seer: 0.10,
+  painter: 0.10,
+  composer: 0.15,
+  scribe: 0.05,
+  scholar: 0.10,
+  informant: 0.15,
+}
+
 function toAssetAmount(price: string, asset: string) {
   return {
     amount: convertToTokenAmount(price.replace(/^\$/, ''), 7),
@@ -48,7 +57,7 @@ export function buildPaymentRoutes(env: Env): RoutesConfig {
       accepts: {
         scheme: 'exact',
         network,
-        payTo: env.ORACLE_TREASURY_ADDRESS,
+        payTo: getOracleWalletAddress(env, oracleId),
         price: toAssetAmount(price, env.USDC_CONTRACT),
         maxTimeoutSeconds: 60,
         extra: { areFeesSponsored: true },
@@ -59,6 +68,19 @@ export function buildPaymentRoutes(env: Env): RoutesConfig {
   }
 
   return routes
+}
+
+export function getOracleWalletAddress(env: Env, oracleId: OracleId): string {
+  const wallets: Record<OracleId, string | undefined> = {
+    seer: env.ORACLE_WALLET_SEER,
+    painter: env.ORACLE_WALLET_PAINTER,
+    composer: env.ORACLE_WALLET_COMPOSER,
+    scribe: env.ORACLE_WALLET_SCRIBE,
+    scholar: env.ORACLE_WALLET_SCHOLAR,
+    informant: env.ORACLE_WALLET_INFORMANT,
+  }
+
+  return wallets[oracleId] ?? env.ORACLE_TREASURY_ADDRESS
 }
 
 /**
