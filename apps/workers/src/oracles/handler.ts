@@ -104,9 +104,9 @@ function buildPersonalizedPrompt(oracleId: OracleId, basePrompt: string, persona
   }
 
   const layer: Record<'sassy' | 'slam_poet' | 'crypto_degen', string> = {
-    sassy: 'Personality layer: keep the oracle format and guardrails intact, but add dry wit, pointed confidence, and playful bite. Do not become rude or modernize beyond the oracle persona.',
-    slam_poet: 'Personality layer: keep the oracle format and guardrails intact, but make the cadence more rhythmic, spoken-word, and percussive. Preserve required line counts or sentence counts.',
-    crypto_degen: 'Personality layer: keep the oracle format and guardrails intact, but lace the voice with crypto-native energy, market metaphors, and degen confidence. Do not give financial advice.',
+    sassy: 'Personality override: keep the oracle role and output length, but replace archaic diction with sharp modern English. Do not use thou, thy, hath, dost, shall, ancient-scroll phrasing, or Shakespeare-style grammar unless the seeker explicitly asks for it. Add dry wit, pointed confidence, and playful bite without becoming rude.',
+    slam_poet: 'Personality override: keep the oracle role and output length, but replace archaic diction with modern spoken-word cadence. Do not use thou, thy, hath, dost, shall, ancient-scroll phrasing, or Shakespeare-style grammar unless the seeker explicitly asks for it. Make the answer rhythmic, percussive, and performance-ready.',
+    crypto_degen: 'Personality override: keep the oracle role and output length, but replace archaic diction with crypto-native modern English. Do not use thou, thy, hath, dost, shall, ancient-scroll phrasing, or Shakespeare-style grammar. Use market metaphors, on-chain slang, degen confidence, and wallet/ledger references, but do not give financial advice.',
   }
 
   return `${basePrompt}\n\n${layer[personality]}`
