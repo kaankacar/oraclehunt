@@ -112,15 +112,10 @@ function buildPersonalizedPrompt(oracleId: OracleId, basePrompt: string, persona
   return `${basePrompt}\n\n${layer[personality]}`
 }
 
-async function getStellaContext(req: OracleRequest, env: Env): Promise<{ context?: string; trace: ProcessingTraceStep }> {
+async function getStellaContext(req: OracleRequest, env: Env): Promise<{ context?: string; detail: string }> {
   if (!env.STELLA_API_URL || !env.STELLA_API_KEY) {
     return {
-      trace: {
-        id: 'stella-context',
-        label: 'Stella Context Unavailable',
-        status: 'error',
-        detail: 'Stella env vars are not configured, so Scholar continued with Gemini-only context.',
-      },
+      detail: 'Stella env vars are not configured, so Scholar continued with Gemini-only context.',
     }
   }
 
@@ -147,21 +142,11 @@ async function getStellaContext(req: OracleRequest, env: Env): Promise<{ context
 
     return {
       context,
-      trace: {
-        id: 'stella-context',
-        label: 'Stella Context Retrieved',
-        status: 'success',
-        detail: 'Scholar pulled Stellar-specific context from Stella before Gemini wrote the scroll.',
-      },
+      detail: 'Scholar pulled Stellar-specific context from Stella before Gemini wrote the scroll.',
     }
   } catch (error) {
     return {
-      trace: {
-        id: 'stella-context',
-        label: 'Stella Context Unavailable',
-        status: 'error',
-        detail: `Scholar continued without Stella context: ${error instanceof Error ? error.message : 'unknown error'}.`,
-      },
+      detail: `Scholar continued without Stella context: ${error instanceof Error ? error.message : 'unknown error'}.`,
     }
   }
 }
@@ -192,6 +177,77 @@ function buildEconomics(env: Env, oracleId: OracleId, estimatedCost: number) {
   }
 }
 
+function buildPublicOracleTrace(
+  env: Env,
+  oracleId: OracleId,
+  txHash?: string,
+  options?: {
+    oracleDetail?: string
+    saveDetail?: string
+  },
+): ProcessingTraceStep[] {
+  const explorerUrl = txHash ? getTxExplorerUrl(env, txHash) : undefined
+
+  return [
+    {
+      id: 'client:payment-request',
+      label: 'Preparing x402 Payment Request',
+      status: 'success',
+      detail: 'The browser priced the request and assembled the exact USDC transfer for this oracle.',
+    },
+    {
+      id: 'client:passkey-signature',
+      label: 'Passkey Signature Approved',
+      status: 'success',
+      detail: 'The passkey wallet authorized the payment payload for this consultation.',
+    },
+    {
+      id: 'client:request-dispatch',
+      label: 'Paid Oracle Request Submitted',
+      status: 'success',
+      detail: 'The signed x402 payment payload was attached and sent to the oracle worker.',
+    },
+    {
+      id: 'client:oracle-processing',
+      label: 'Oracle Processing',
+      status: 'success',
+      detail: 'The worker accepted the paid request and invoked the oracle model.',
+    },
+    {
+      id: 'client:supabase-save',
+      label: 'Saving to Codex',
+      status: 'success',
+      detail: options?.saveDetail ?? 'The finished artifact was prepared for storage with payment and trace metadata.',
+    },
+    {
+      id: 'payment-settled',
+      label: 'Payment Settled on Stellar',
+      status: txHash ? 'success' : 'pending',
+      detail: txHash
+        ? 'The sponsored x402 USDC payment was confirmed before the oracle responded.'
+        : 'The worker accepted the payment and is waiting for settlement metadata.',
+      txHash,
+      links: explorerUrl ? [{ label: 'Open payment on Stellar Expert', url: explorerUrl }] : undefined,
+    },
+    {
+      id: 'oracle-generated',
+      label: 'Oracle Generated Artifact',
+      status: 'success',
+      detail: options?.oracleDetail ?? (
+        oracleId === 'painter'
+          ? 'Gemini image generation returned the portrait and caption.'
+          : `Gemini ${TEXT_MODEL} returned the oracle artifact.`
+      ),
+    },
+    {
+      id: 'artifact-saved',
+      label: 'Saved to Codex',
+      status: 'success',
+      detail: 'The consultation was written to Supabase and is visible in Codex, Gallery, and Leaderboard.',
+    },
+  ]
+}
+
 export async function handleOracle(
   oracleId: OracleId,
   req: OracleRequest,
@@ -214,7 +270,7 @@ export async function handleOracle(
   let promptTokenCount: number | undefined
   let candidateTokenCount: number | undefined
   let totalTokenCount: number | undefined
-  const additionalTrace: ProcessingTraceStep[] = []
+  let oracleTraceDetail: string | undefined
 
   if (oracleId === 'painter') {
     const imageResult = await geminiImage(
@@ -232,7 +288,7 @@ export async function handleOracle(
 
     if (oracleId === 'scholar') {
       const stella = await getStellaContext(req, env)
-      additionalTrace.push(stella.trace)
+      oracleTraceDetail = stella.detail
       if (stella.context) {
         userMessage = `Seeker question:\n${req.prompt}\n\nStella context to synthesize accurately:\n${stella.context}`
         systemPrompt = `${systemPrompt}\n\nUse the Stella context as factual grounding. If the context is incomplete, say only what is supported by the context and general Stellar knowledge.`
@@ -247,34 +303,9 @@ export async function handleOracle(
   }
 
   const timestamp = new Date().toISOString()
-  const explorerUrl = txHash ? getTxExplorerUrl(env, txHash) : undefined
-  const processingTrace: ProcessingTraceStep[] = [
-    {
-      id: 'payment-settled',
-      label: 'Payment Settled on Stellar',
-      status: 'success',
-      detail: txHash
-        ? 'The sponsored x402 USDC payment was confirmed before the oracle responded.'
-        : 'Oracle request completed without a recorded payment transaction hash.',
-      txHash,
-      links: explorerUrl ? [{ label: 'Open payment on Stellar Expert', url: explorerUrl }] : undefined,
-    },
-    ...additionalTrace,
-    {
-      id: 'oracle-generated',
-      label: 'Oracle Generated Artifact',
-      status: 'success',
-      detail: oracleId === 'painter'
-        ? 'Gemini image generation returned the portrait and caption.'
-        : `Gemini ${TEXT_MODEL} returned the oracle artifact.`,
-    },
-    {
-      id: 'artifact-saved',
-      label: 'Saved to Codex',
-      status: 'success',
-      detail: 'The consultation was written to Supabase and is visible in Codex, Gallery, and Leaderboard.',
-    },
-  ]
+  const processingTrace = buildPublicOracleTrace(env, oracleId, txHash, {
+    oracleDetail: oracleTraceDetail,
+  })
   const estimatedModelCost = estimateGeminiCostUsdc(oracleId, { promptTokenCount, candidateTokenCount })
   const economics = buildEconomics(env, oracleId, estimatedModelCost)
 
@@ -305,7 +336,7 @@ export async function handleOracle(
     artifactImage,
     oracleId,
     txHash,
-    explorerUrl,
+    explorerUrl: txHash ? getTxExplorerUrl(env, txHash) : undefined,
     processingTrace,
     timestamp,
     consultationId: inserted.id as string,

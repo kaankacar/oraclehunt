@@ -447,7 +447,11 @@ function mergeTrace(
   clientTrace: ProcessingTraceStep[],
   serverTrace: ProcessingTraceStep[],
 ): ProcessingTraceStep[] {
-  return [...clientTrace, ...serverTrace]
+  const byId = new Map<string, ProcessingTraceStep>()
+  for (const step of clientTrace) byId.set(step.id, step)
+  for (const step of serverTrace) byId.set(step.id, step)
+
+  return Array.from(byId.values())
 }
 
 function getPlaceholder(oracleId: string): string {
