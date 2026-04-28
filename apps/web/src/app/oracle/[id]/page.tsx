@@ -58,6 +58,24 @@ const PUBLIC_TRACE_TEMPLATE: ProcessingTraceStep[] = [
     status: 'pending',
     detail: 'The finished artifact will be saved with payment and trace metadata.',
   },
+  {
+    id: 'payment-settled',
+    label: 'Payment Settled on Stellar',
+    status: 'pending',
+    detail: 'The worker will attach the Stellar settlement hash after x402 confirmation.',
+  },
+  {
+    id: 'oracle-generated',
+    label: 'Oracle Generated Artifact',
+    status: 'pending',
+    detail: 'The oracle model will return the final artifact for this consultation.',
+  },
+  {
+    id: 'artifact-saved',
+    label: 'Saved to Codex',
+    status: 'pending',
+    detail: 'The consultation will appear in your Codex, Gallery, and Leaderboard.',
+  },
 ]
 
 const PERSONALITIES: Array<{ id: OraclePersonality; label: string }> = [
@@ -435,9 +453,6 @@ function advancePublicTrace(
   if (event === 'oracle-response-received') {
     markSuccess('client:oracle-processing', 'The worker returned the oracle artifact.')
     markSuccess('client:supabase-save', 'The artifact was saved with the final worker trace.')
-    next.forEach((step) => {
-      if (step.status === 'pending') step.status = 'success'
-    })
   }
 
   return next
