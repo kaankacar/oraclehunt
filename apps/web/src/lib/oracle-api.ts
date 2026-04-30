@@ -2,10 +2,8 @@
 
 import { wrapFetchWithPayment, x402Client } from '@x402/fetch'
 import {
-  authenticateWalletForSmol,
   buildPasskeyPaymentScheme,
   loadWalletFromStorage,
-  saveWalletToStorage,
 } from './wallet'
 import type { OraclePersonality, ProcessingTraceStep } from '@/types'
 
@@ -36,15 +34,6 @@ export interface ComposerPendingResult {
   timestamp: string
 }
 
-export interface ComposerAuthRequiredResult {
-  status: 'smol-auth-required'
-  oracleId: 'composer'
-  txHash?: string
-  explorerUrl?: string
-  processingTrace: ProcessingTraceStep[]
-  timestamp: string
-}
-
 export interface ComposerErrorResult {
   status: 'error'
   oracleId: 'composer'
@@ -58,7 +47,6 @@ export interface ComposerErrorResult {
 export type OracleConsultResponse =
   | OracleResult
   | ComposerPendingResult
-  | ComposerAuthRequiredResult
   | ComposerErrorResult
 
 interface ProgressOptions {
@@ -123,47 +111,6 @@ export async function consultOracle(
   }
 
   options?.onProgress?.('oracle-response-received')
-  return response.json() as Promise<OracleConsultResponse>
-}
-
-export async function ensureSmolAuth(walletAddress: string): Promise<void> {
-  const stored = loadWalletFromStorage()
-  if (!stored || stored.contractId !== walletAddress) {
-    throw new Error('Reconnect your wallet before linking Composer to Smol.')
-  }
-
-  const auth = await authenticateWalletForSmol(walletAddress, stored.keyIdBase64)
-  saveWalletToStorage(auth.contractId, auth.keyIdBase64)
-
-  const response = await fetch('/api/smol/auth', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contractId: auth.contractId,
-      keyIdBase64: auth.keyIdBase64,
-      assertion: auth.assertion,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await readOracleError(response))
-  }
-}
-
-export async function resumeComposerJob(
-  walletAddress: string,
-  txHash: string,
-): Promise<OracleConsultResponse> {
-  const response = await fetch(`${WORKERS_URL}/oracle/composer/resume`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ walletAddress, txHash }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await readOracleError(response))
-  }
-
   return response.json() as Promise<OracleConsultResponse>
 }
 

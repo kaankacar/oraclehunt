@@ -51,12 +51,12 @@ export default function HowItWorksPage() {
             revenue, estimated model cost, and estimated profit by agent.
           </Info>
           <Info title="AI Generation">
-            Text and image oracles use Gemini. Scholar first asks Stella for Stellar-specific context, then
-            synthesizes the final scroll-style answer with Gemini.
+            Text and image oracles use Gemini. Scholar returns Stella&apos;s answer directly for
+            Stellar-specific questions.
           </Info>
           <Info title="Composer">
-            Composer has an async path through Smol. It may ask for one extra passkey assertion to link a
-            Smol session, then the page polls until lyrics, art, and audio are ready.
+            Composer queues one Cloudflare MiniMax Music 2.6 generation, stores the MP3 in R2,
+            then the page polls until the song is ready.
           </Info>
           <Info title="Hidden Oracle">
             Hidden Oracle keeps its separate proof flow. It is passphrase-gated, writes zero-knowledge

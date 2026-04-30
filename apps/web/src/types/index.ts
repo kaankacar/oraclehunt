@@ -50,7 +50,7 @@ export const ORACLES: OracleMeta[] = [
     specialty: 'Stellar trivia & lore',
     emoji: '📚',
     fee: '$0.10',
-    description: 'Ask about Stellar, SDF, or Lumens. Answers arrive as ancient scrolls.',
+    description: 'Ask about Stellar, SDF, or Lumens. Answers come directly from Stella.',
   },
   {
     id: 'informant',
@@ -64,7 +64,7 @@ export const ORACLES: OracleMeta[] = [
 
 export const PROGRESS_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar'] as const
 export const PUBLIC_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant'] as const
-export const PERSONALITY_ORACLE_IDS = ['seer', 'scribe', 'scholar', 'informant'] as const
+export const PERSONALITY_ORACLE_IDS = ['seer', 'scribe', 'informant'] as const
 
 export function isProgressOracleId(oracleId: OracleId | string): oracleId is typeof PROGRESS_ORACLE_IDS[number] {
   return PROGRESS_ORACLE_IDS.includes(oracleId as typeof PROGRESS_ORACLE_IDS[number])

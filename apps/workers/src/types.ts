@@ -1,6 +1,28 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant'
 export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
 
+export interface WorkersAI {
+  run(model: string, input: Record<string, unknown>): Promise<unknown>
+}
+
+export interface ComposerAudioObject {
+  body: ReadableStream
+  httpMetadata?: { contentType?: string }
+}
+
+export interface ComposerAudioBucket {
+  put(
+    key: string,
+    value: ArrayBuffer,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>
+  get(key: string): Promise<ComposerAudioObject | null>
+}
+
+export interface ComposerQueueBinding {
+  send(message: unknown): Promise<void>
+}
+
 export interface Env {
   GEMINI_API_KEY: string
   ORACLE_TREASURY_ADDRESS: string
@@ -17,6 +39,10 @@ export interface Env {
   ADMIN_CORS_ORIGIN?: string
   STELLA_API_URL?: string
   STELLA_API_KEY?: string
+  WORKERS_PUBLIC_URL?: string
+  AI?: WorkersAI
+  COMPOSER_AUDIO?: ComposerAudioBucket
+  COMPOSER_QUEUE?: ComposerQueueBinding
   ORACLE_WALLET_SEER?: string
   ORACLE_WALLET_PAINTER?: string
   ORACLE_WALLET_COMPOSER?: string
@@ -48,15 +74,6 @@ export interface ComposerPendingResponse {
   status: 'pending'
   oracleId: 'composer'
   jobId: string
-  txHash?: string
-  explorerUrl?: string
-  processingTrace: ProcessingTraceStep[]
-  timestamp: string
-}
-
-export interface ComposerAuthRequiredResponse {
-  status: 'smol-auth-required'
-  oracleId: 'composer'
   txHash?: string
   explorerUrl?: string
   processingTrace: ProcessingTraceStep[]

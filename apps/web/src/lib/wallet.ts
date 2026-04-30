@@ -1,6 +1,5 @@
 'use client'
 
-import { startAuthentication } from '@simplewebauthn/browser'
 import { PasskeyKit, PasskeyClient } from 'passkey-kit'
 import { ChannelsClient } from '@openzeppelin/relayer-plugin-channels'
 import * as contract from '@stellar/stellar-sdk/contract'
@@ -29,10 +28,6 @@ const WORKERS_URL = process.env.NEXT_PUBLIC_WORKERS_URL ?? 'http://localhost:878
 
 let _passkeyKit: PasskeyKit | null = null
 let _channelsClient: ChannelsClient | null = null
-
-function toBase64Url(input: string): string {
-  return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-}
 
 function getPasskeyKit(): PasskeyKit {
   if (!_passkeyKit) {
@@ -64,10 +59,6 @@ function getChannelsClient(): ChannelsClient {
 export interface WalletResult {
   contractId: string
   keyIdBase64: string
-}
-
-export interface SmolAuthenticationResult extends WalletResult {
-  assertion: unknown
 }
 
 export interface KnownWallet extends WalletResult {
@@ -126,45 +117,6 @@ export async function connectWalletWithOptions(
   const kit = getPasskeyKit()
   const { contractId, keyIdBase64 } = await kit.connectWallet(opts)
   return { contractId, keyIdBase64 }
-}
-
-export async function authenticateWalletForSmol(
-  expectedContractId: string,
-  expectedKeyIdBase64?: string,
-): Promise<SmolAuthenticationResult> {
-  if (expectedKeyIdBase64) {
-    const assertion = await startAuthentication({
-      optionsJSON: {
-        challenge: toBase64Url('stellaristhebetterblockchain'),
-        allowCredentials: [{ id: expectedKeyIdBase64, type: 'public-key' }],
-        userVerification: 'preferred',
-      },
-    })
-
-    return {
-      contractId: expectedContractId,
-      keyIdBase64: expectedKeyIdBase64,
-      assertion,
-    }
-  }
-
-  const kit = getPasskeyKit()
-  const { contractId, keyIdBase64, rawResponse } = await kit.connectWallet({
-    getContractId: async () => expectedContractId,
-  })
-
-  if (contractId !== expectedContractId) {
-    throw new Error('The selected passkey did not resolve to the expected wallet.')
-  }
-  if (!rawResponse) {
-    throw new Error('Passkey authentication did not return a WebAuthn assertion.')
-  }
-
-  return {
-    contractId,
-    keyIdBase64,
-    assertion: rawResponse,
-  }
 }
 
 /**

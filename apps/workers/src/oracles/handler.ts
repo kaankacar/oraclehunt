@@ -13,7 +13,7 @@ import { ORACLE_PRICE_USDC, getOracleWalletAddress } from '../middleware/payment
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 const TEXT_MODEL = 'gemini-2.5-flash'
 const IMAGE_MODEL = 'gemini-2.5-flash-image'
-const TEXT_ORACLES_WITH_PERSONALITY = new Set<OracleId>(['seer', 'scribe', 'scholar', 'informant'])
+const TEXT_ORACLES_WITH_PERSONALITY = new Set<OracleId>(['seer', 'scribe', 'informant'])
 const GEMINI_FLASH_INPUT_PER_MILLION_USDC = 0.30
 const GEMINI_FLASH_OUTPUT_PER_MILLION_USDC = 2.50
 const GEMINI_IMAGE_ESTIMATED_COST_USDC = 0.039
@@ -112,43 +112,36 @@ function buildPersonalizedPrompt(oracleId: OracleId, basePrompt: string, persona
   return `${basePrompt}\n\n${layer[personality]}`
 }
 
-async function getStellaContext(req: OracleRequest, env: Env): Promise<{ context?: string; detail: string }> {
+async function getStellaAnswer(req: OracleRequest, env: Env): Promise<string> {
   if (!env.STELLA_API_URL || !env.STELLA_API_KEY) {
-    return {
-      detail: 'Stella env vars are not configured, so Scholar continued with Gemini-only context.',
-    }
+    throw new Error('Scholar/Stella is unavailable: Stella env vars are not configured.')
   }
 
-  try {
-    const response = await fetch(env.STELLA_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.STELLA_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: req.prompt, prompt: req.prompt }),
-    })
-    const json = await response.json().catch(() => ({})) as {
-      answer?: string
-      context?: string
-      text?: string
-      result?: string
-    }
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-    const context = json.context ?? json.answer ?? json.text ?? json.result
-    if (!context?.trim()) throw new Error('empty Stella response')
-
-    return {
-      context,
-      detail: 'Scholar pulled Stellar-specific context from Stella before Gemini wrote the scroll.',
-    }
-  } catch (error) {
-    return {
-      detail: `Scholar continued without Stella context: ${error instanceof Error ? error.message : 'unknown error'}.`,
-    }
+  const response = await fetch(env.STELLA_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.STELLA_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query: req.prompt, prompt: req.prompt }),
+  })
+  const json = await response.json().catch(() => ({})) as {
+    answer?: string
+    context?: string
+    text?: string
+    result?: string
   }
+
+  if (!response.ok) {
+    throw new Error(`Scholar/Stella is unavailable: HTTP ${response.status}`)
+  }
+
+  const answer = json.answer ?? json.text ?? json.result ?? json.context
+  if (!answer?.trim()) {
+    throw new Error('Scholar/Stella is unavailable: Stella returned empty content.')
+  }
+
+  return answer.trim()
 }
 
 function estimateGeminiCostUsdc(
@@ -283,23 +276,20 @@ export async function handleOracle(
     candidateTokenCount = imageResult.candidateTokenCount
     totalTokenCount = imageResult.totalTokenCount
   } else {
-    let systemPrompt = buildPersonalizedPrompt(oracleId, ORACLE_PROMPTS[oracleId], req.personality)
-    let userMessage = req.prompt
-
     if (oracleId === 'scholar') {
-      const stella = await getStellaContext(req, env)
-      oracleTraceDetail = stella.detail
-      if (stella.context) {
-        userMessage = `Seeker question:\n${req.prompt}\n\nStella context to synthesize accurately:\n${stella.context}`
-        systemPrompt = `${systemPrompt}\n\nUse the Stella context as factual grounding. If the context is incomplete, say only what is supported by the context and general Stellar knowledge.`
-      }
+      artifact = await getStellaAnswer(req, env)
+      oracleTraceDetail = 'Scholar returned Stella’s answer directly without Gemini rewriting or personality styling.'
+      promptTokenCount = 0
+      candidateTokenCount = 0
+      totalTokenCount = 0
+    } else {
+      const systemPrompt = buildPersonalizedPrompt(oracleId, ORACLE_PROMPTS[oracleId], req.personality)
+      const textResult = await geminiText(env.GEMINI_API_KEY, systemPrompt, req.prompt)
+      artifact = textResult.text
+      promptTokenCount = textResult.promptTokenCount
+      candidateTokenCount = textResult.candidateTokenCount
+      totalTokenCount = textResult.totalTokenCount
     }
-
-    const textResult = await geminiText(env.GEMINI_API_KEY, systemPrompt, userMessage)
-    artifact = textResult.text
-    promptTokenCount = textResult.promptTokenCount
-    candidateTokenCount = textResult.candidateTokenCount
-    totalTokenCount = textResult.totalTokenCount
   }
 
   const timestamp = new Date().toISOString()
@@ -307,7 +297,13 @@ export async function handleOracle(
     oracleDetail: oracleTraceDetail,
   })
   const estimatedModelCost = estimateGeminiCostUsdc(oracleId, { promptTokenCount, candidateTokenCount })
-  const economics = buildEconomics(env, oracleId, estimatedModelCost)
+  const economics = oracleId === 'scholar'
+    ? {
+        ...buildEconomics(env, oracleId, 0),
+        ai_provider: 'Stella',
+        ai_model: 'stella',
+      }
+    : buildEconomics(env, oracleId, estimatedModelCost)
 
   const { data: inserted, error: insertError } = await supabase
     .from('consultations')

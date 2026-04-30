@@ -189,7 +189,7 @@ export default function LeaderboardPage() {
                     <span className="font-mono text-navy/60">${formatMoney(entry.gross_revenue_usdc)}</span>
                     <span className="font-mono text-navy/60">${formatMoney(entry.estimated_model_cost_usdc)}</span>
                     <span className="font-mono text-accent">
-                      ${formatMoney(entry.estimated_profit_usdc)} · {formatProfitPercent(entry)}%
+                      ${formatMoney(entry.estimated_profit_usdc)} · {formatProfitMargin(entry)}
                     </span>
                     <span className="font-mono text-xs text-navy/45 truncate">
                       {entry.oracle_wallet_address ? truncateAddress(entry.oracle_wallet_address) : 'unconfigured'}
@@ -198,7 +198,7 @@ export default function LeaderboardPage() {
                   <div className="md:hidden space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-navy">{oracle?.name ?? entry.oracle_id}</span>
-                      <span className="font-mono text-accent">{formatProfitPercent(entry)}%</span>
+                      <span className="font-mono text-accent">{formatProfitMargin(entry)}</span>
                     </div>
                     <p className="text-xs text-navy/45">
                       {entry.consultations} runs · ${formatMoney(entry.estimated_profit_usdc)} profit · ${formatMoney(entry.gross_revenue_usdc)} gross · ${formatMoney(entry.estimated_model_cost_usdc)} estimated cost
@@ -227,8 +227,8 @@ function formatMoney(value: number | string | null): string {
   return toNumber(value).toFixed(4)
 }
 
-function formatProfitPercent(entry: AgenticEconomyEntry): string {
+function formatProfitMargin(entry: AgenticEconomyEntry): string {
   const gross = toNumber(entry.gross_revenue_usdc)
-  if (gross <= 0) return '0.0'
-  return ((toNumber(entry.estimated_profit_usdc) / gross) * 100).toFixed(1)
+  if (gross <= 0) return '0.00% margin'
+  return `${((toNumber(entry.estimated_profit_usdc) / gross) * 100).toFixed(2)}% margin`
 }

@@ -53,22 +53,22 @@ export default function GalleryPage() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  async function handleVote(targetAddress: string) {
+  async function handleVote(targetConsultationId: string) {
     if (!address) return
 
-    const result = await castVote(address, targetAddress)
+    const result = await castVote(address, targetConsultationId)
     if (result.success) {
-      setVotedFor((prev) => new Set([...prev, targetAddress]))
-      setVoteMessages((prev) => ({ ...prev, [targetAddress]: '✓ Voted!' }))
+      setVotedFor((prev) => new Set([...prev, targetConsultationId]))
+      setVoteMessages((prev) => ({ ...prev, [targetConsultationId]: 'Voted' }))
       loadGallery()
     } else {
-      setVoteMessages((prev) => ({ ...prev, [targetAddress]: result.error ?? 'Vote failed' }))
+      setVoteMessages((prev) => ({ ...prev, [targetConsultationId]: result.error ?? 'Vote failed' }))
     }
 
     setTimeout(() => {
       setVoteMessages((prev) => {
         const next = { ...prev }
-        delete next[targetAddress]
+        delete next[targetConsultationId]
         return next
       })
     }, 3000)
@@ -94,7 +94,7 @@ export default function GalleryPage() {
           Explore every oracle output, or switch to the per-seeker Codex view.
         </p>
         <p className="text-navy/45 text-xs mt-2">
-          Votes are cast here in the Gallery, and each vote applies to the seeker&apos;s whole Codex.
+          Votes apply to individual artifacts. Seeker totals sum all artifact votes.
         </p>
       </div>
 
@@ -153,8 +153,8 @@ export default function GalleryPage() {
             {filteredArtifacts.map((artifact) => {
               const targetAddress = artifact.stellar_address
               const isMe = targetAddress === address
-              const hasVoted = votedFor.has(targetAddress)
-              const voteMsg = voteMessages[targetAddress]
+              const hasVoted = votedFor.has(artifact.id)
+              const voteMsg = voteMessages[artifact.id]
               const ownerLabel = artifact.display_name ?? truncateAddress(targetAddress)
 
               return (
@@ -175,7 +175,7 @@ export default function GalleryPage() {
                       {voteMsg && <span className="text-xs text-navy/50">{voteMsg}</span>}
                       {!isMe && address ? (
                         <button
-                          onClick={() => handleVote(targetAddress)}
+                          onClick={() => handleVote(artifact.id)}
                           disabled={hasVoted}
                           className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
                             hasVoted
@@ -183,7 +183,7 @@ export default function GalleryPage() {
                               : 'bg-light-blue text-accent hover:bg-accent hover:text-white'
                           }`}
                         >
-                          {hasVoted ? `★ ${artifact.vote_count}` : `Vote for this seeker's Codex · ☆ ${artifact.vote_count}`}
+                          {hasVoted ? `★ ${artifact.vote_count}` : `Vote for this artifact · ☆ ${artifact.vote_count}`}
                         </button>
                       ) : (
                         <span className="text-xs text-navy/30">★ {artifact.vote_count}</span>
@@ -206,8 +206,6 @@ export default function GalleryPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {entries.map((entry) => {
               const isMe = entry.stellar_address === address
-              const hasVoted = votedFor.has(entry.stellar_address)
-              const voteMsg = voteMessages[entry.stellar_address]
               const displayName = entry.display_name ?? truncateAddress(entry.stellar_address)
 
               return (
@@ -235,7 +233,7 @@ export default function GalleryPage() {
                   </div>
 
                   <p className="text-[11px] text-navy/40 mb-4">
-                    Votes are cast in the Gallery and apply to the whole Codex.
+                    Vote totals sum this seeker&apos;s artifact votes.
                   </p>
 
                   <div className="flex items-center justify-between">
@@ -247,25 +245,7 @@ export default function GalleryPage() {
                     </Link>
 
                     <div className="flex items-center gap-2">
-                      {voteMsg && (
-                        <span className="text-xs text-navy/50">{voteMsg}</span>
-                      )}
-                      {!isMe && address && (
-                        <button
-                          onClick={() => handleVote(entry.stellar_address)}
-                          disabled={hasVoted}
-                          className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
-                            hasVoted
-                              ? 'bg-accent/10 text-accent/50 cursor-default'
-                              : 'bg-light-blue text-accent hover:bg-accent hover:text-white'
-                          }`}
-                        >
-                          {hasVoted ? `★ ${entry.vote_count}` : `☆ ${entry.vote_count}`}
-                        </button>
-                      )}
-                      {(isMe || !address) && (
-                        <span className="text-xs text-navy/30">★ {entry.vote_count}</span>
-                      )}
+                      <span className="text-xs text-navy/30">★ {entry.vote_count}</span>
                     </div>
                   </div>
                 </div>

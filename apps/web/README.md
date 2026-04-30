@@ -9,7 +9,7 @@ It owns:
 - x402 payment initiation from the browser
 - Codex, Gallery, Leaderboard, and Marketplace pages
 - Hidden Oracle proof generation in the browser
-- server-side proxy routes for wallet registration, votes, faucet, Hidden Oracle, and Smol auth
+- server-side proxy routes for wallet registration, votes, faucet, and Hidden Oracle
 
 ## Folder Map
 
@@ -66,7 +66,7 @@ Shared public-oracle page for:
 Notes:
 
 - all public oracles pay through x402
-- Composer may enter a second Smol-auth step and then poll asynchronously
+- Composer queues one MiniMax song and polls asynchronously
 - Informant shows previous Informant answers for the current wallet
 
 ### `/oracle/hidden`
@@ -116,7 +116,6 @@ Usernames are public and visible here from the start.
 - `POST /api/faucet`: proxy to the worker faucet
 - `POST /api/hidden-oracle/challenge`: proxy to worker challenge issuance
 - `POST /api/hidden-oracle/consult`: proxy to worker Hidden Oracle verification
-- `POST /api/smol/auth`: exchanges a passkey assertion for a Smol JWT and stores it in Supabase
 
 ## Wallet and Login Model
 
@@ -191,14 +190,12 @@ Owned in:
 
 - `src/lib/oracle-api.ts`
 - `src/app/oracle/[id]/page.tsx`
-- `src/app/api/smol/auth/route.ts`
 
 Extra behavior:
 
-- may require one additional passkey assertion for Smol
 - receives `pending` instead of an immediate artifact
 - polls worker status until complete
-- renders cover art, lyrics, and two audio variations
+- renders one generated audio track
 
 ## Styling
 

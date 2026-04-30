@@ -76,12 +76,12 @@ export async function getVoteCount(stellarAddress: string): Promise<number> {
 /** Cast a vote for a Codex. Returns error message if vote fails. */
 export async function castVote(
   voterAddress: string,
-  targetAddress: string,
+  targetConsultationId: string,
 ): Promise<{ success: boolean; error?: string }> {
   const response = await fetch('/api/votes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ voterAddress, targetAddress }),
+    body: JSON.stringify({ voterAddress, targetConsultationId }),
   })
 
   let payload: { error?: string } = {}
