@@ -46,11 +46,11 @@ export const ORACLES: OracleMeta[] = [
   },
   {
     id: 'scholar',
-    name: 'The Scholar',
-    specialty: 'Stellar trivia & lore',
-    emoji: '📚',
+    name: 'Stella',
+    specialty: 'Stellar answers from Stella',
+    emoji: '✨',
     fee: '$0.10',
-    description: 'Ask about Stellar, SDF, or Lumens. Answers come directly from Stella.',
+    description: 'Ask about Stellar, SDF, Soroban, Lumens, or ecosystem lore. Stella answers directly from its Stellar knowledge base.',
   },
   {
     id: 'informant',

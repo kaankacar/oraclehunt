@@ -8,7 +8,7 @@ const ORACLE_EMOJI: Record<string, string> = {
   painter: '🎨',
   composer: '🎵',
   scribe: '📜',
-  scholar: '📚',
+  scholar: '✨',
   informant: '🕵️',
   hidden: '🗝️',
 }
@@ -18,7 +18,7 @@ const ORACLE_NAME: Record<string, string> = {
   painter: 'The Painter',
   composer: 'The Composer',
   scribe: 'The Scribe',
-  scholar: 'The Scholar',
+  scholar: 'Stella',
   informant: 'The Informant',
   hidden: 'The Hidden Oracle',
 }

@@ -160,7 +160,7 @@ export default function OraclePage() {
     painter: '▓▒░ 🎨 ░▒▓',
     composer: '♩ ♪ ♫ 🎵 ♫ ♪ ♩',
     scribe: '— 📜 —',
-    scholar: '⌗ 📚 ⌗',
+    scholar: '✦ ✨ Stella ✨ ✦',
     informant: '// 🕵️ //',
   }
 
@@ -445,7 +445,7 @@ function getPlaceholder(oracleId: string): string {
     painter: "Describe a person or scene you'd like rendered in pixel art…",
     composer: "Name a theme for your song (e.g. 'late-night coding sessions')…",
     scribe: "Tell me anything. I will answer only in haiku.",
-    scholar: "Ask about Stellar, SDF, Lumens, or the blockchain…",
+    scholar: "Ask Stella about Stellar, SDF, Soroban, Lumens, or the ecosystem…",
     informant: "Ask me anything. I speak only in riddles.",
   }
   return placeholders[oracleId] ?? 'Your message to the Oracle…'

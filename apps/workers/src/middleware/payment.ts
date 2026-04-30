@@ -24,6 +24,15 @@ const ORACLE_PRICES: Record<OracleId, string> = {
   informant: '$0.15',
 }
 
+const ORACLE_PAYMENT_NAMES: Record<OracleId, string> = {
+  seer: 'The Seer',
+  painter: 'The Painter',
+  composer: 'The Composer',
+  scribe: 'The Scribe',
+  scholar: 'Stella',
+  informant: 'The Informant',
+}
+
 export const ORACLE_PRICE_USDC: Record<OracleId, number> = {
   seer: 0.10,
   painter: 0.10,
@@ -62,7 +71,7 @@ export function buildPaymentRoutes(env: Env): RoutesConfig {
         maxTimeoutSeconds: 60,
         extra: { areFeesSponsored: true },
       },
-      description: `Oracle Hunt — consult The ${oracleId.charAt(0).toUpperCase() + oracleId.slice(1)}`,
+      description: `Oracle Hunt — consult ${ORACLE_PAYMENT_NAMES[oracleId]}`,
       mimeType: 'application/json',
     }
   }

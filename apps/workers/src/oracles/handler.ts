@@ -120,7 +120,7 @@ function buildPersonalizedPrompt(oracleId: OracleId, basePrompt: string, persona
 
 async function getStellaAnswer(req: OracleRequest, env: Env): Promise<string> {
   if (!env.STELLA_API_URL || !env.STELLA_API_KEY) {
-    throw new Error('Scholar/Stella is unavailable: Stella env vars are not configured.')
+    throw new Error('Stella is unavailable: Stella env vars are not configured.')
   }
 
   const threadsUrl = env.STELLA_API_URL.replace(/\/+$/, '')
@@ -137,7 +137,7 @@ async function getStellaAnswer(req: OracleRequest, env: Env): Promise<string> {
   })
   const threadJson = await threadResponse.json().catch(() => ({})) as StellaThreadResponse
   if (!threadResponse.ok || !threadJson.id) {
-    throw new Error(`Scholar/Stella is unavailable: ${threadJson.message ?? threadJson.error ?? `HTTP ${threadResponse.status}`}`)
+    throw new Error(`Stella is unavailable: ${threadJson.message ?? threadJson.error ?? `HTTP ${threadResponse.status}`}`)
   }
 
   const messageResponse = await fetch(`${threadsUrl}/${encodeURIComponent(threadJson.id)}/messages`, {
@@ -147,7 +147,7 @@ async function getStellaAnswer(req: OracleRequest, env: Env): Promise<string> {
   })
   if (!messageResponse.ok) {
     const messageJson = await messageResponse.json().catch(() => ({})) as StellaThreadResponse
-    throw new Error(`Scholar/Stella is unavailable: ${messageJson.message ?? messageJson.error ?? `HTTP ${messageResponse.status}`}`)
+    throw new Error(`Stella is unavailable: ${messageJson.message ?? messageJson.error ?? `HTTP ${messageResponse.status}`}`)
   }
 
   const runResponse = await fetch(`${threadsUrl}/${encodeURIComponent(threadJson.id)}/runs`, {
@@ -158,15 +158,15 @@ async function getStellaAnswer(req: OracleRequest, env: Env): Promise<string> {
   const runText = await runResponse.text()
   if (!runResponse.ok) {
     const runJson = parseJson(runText) as StellaThreadResponse | undefined
-    throw new Error(`Scholar/Stella is unavailable: ${runJson?.message ?? runJson?.error ?? `HTTP ${runResponse.status}`}`)
+    throw new Error(`Stella is unavailable: ${runJson?.message ?? runJson?.error ?? `HTTP ${runResponse.status}`}`)
   }
 
   const answer = parseStellaRunText(runText)
   if (!answer?.trim()) {
-    throw new Error('Scholar/Stella is unavailable: Stella returned empty content.')
+    throw new Error('Stella is unavailable: Stella returned empty content.')
   }
 
-  return answer.trim()
+  return stripMarkdownSyntax(answer)
 }
 
 function parseStellaRunText(text: string): string | undefined {
@@ -192,6 +192,23 @@ function parseJson(text: string): unknown {
   } catch {
     return undefined
   }
+}
+
+function stripMarkdownSyntax(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^\s{0,3}[-*+]\s+/gm, '')
+    .replace(/^\s{0,3}\d+\.\s+/gm, '')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/```[\s\S]*?```/g, (match) => match.replace(/```[a-z]*\n?/gi, '').replace(/```/g, ''))
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/^\s*---+\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function extractStellaText(value: unknown): string | undefined {
@@ -362,7 +379,7 @@ export async function handleOracle(
     if (oracleId === 'scholar') {
       try {
         artifact = await getStellaAnswer(req, env)
-        oracleTraceDetail = 'Scholar returned Stella answer directly without Gemini rewriting or personality styling.'
+        oracleTraceDetail = 'Stella returned its answer directly without Gemini rewriting or personality styling.'
         promptTokenCount = 0
         candidateTokenCount = 0
         totalTokenCount = 0
@@ -376,7 +393,7 @@ export async function handleOracle(
         candidateTokenCount = textResult.candidateTokenCount
         totalTokenCount = textResult.totalTokenCount
         const stellaReason = error instanceof Error ? error.message : 'Stella is unavailable.'
-        oracleTraceDetail = `Scholar used Gemini ${TEXT_MODEL} because ${stellaReason}`
+        oracleTraceDetail = `Stella used Gemini ${TEXT_MODEL} fallback because ${stellaReason}`
       }
     } else {
       const systemPrompt = buildPersonalizedPrompt(oracleId, ORACLE_PROMPTS[oracleId], req.personality)

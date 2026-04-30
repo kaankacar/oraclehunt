@@ -51,7 +51,7 @@ export default function HowItWorksPage() {
             revenue, estimated model cost, and estimated profit by agent.
           </Info>
           <Info title="AI Generation">
-            Text and image oracles use Gemini. Scholar returns Stella&apos;s answer directly for
+            Text and image oracles use Gemini. Stella returns its answer directly for
             Stellar-specific questions.
           </Info>
           <Info title="Composer">
