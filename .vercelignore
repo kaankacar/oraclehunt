@@ -11,6 +11,7 @@ __pycache__
 *.env.local
 *.pdf
 *.wasm
+!apps/web/public/zk/hidden_oracle.wasm
 results.csv
 codex_data.json
 
