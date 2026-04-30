@@ -12,6 +12,34 @@ import type {
 } from '../types'
 
 type ComposerSessionStatus = 'queued' | 'processing' | 'complete' | 'error'
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
+const COMPOSER_TEXT_MODEL = 'gemini-2.5-flash'
+const DEFAULT_MINIMAX_MODEL = 'minimax/music-2.6'
+const GEMINI_FLASH_INPUT_PER_MILLION_USDC = 0.30
+const GEMINI_FLASH_OUTPUT_PER_MILLION_USDC = 2.50
+
+interface GeminiComposerResponse {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  usageMetadata?: {
+    promptTokenCount?: number
+    candidatesTokenCount?: number
+    totalTokenCount?: number
+  }
+  error?: { message: string }
+}
+
+interface ComposerGenerationResult {
+  artifactText: string
+  audioUrl: string | null
+  audioStored: boolean
+  aiProvider: string
+  aiModel: string
+  estimatedModelCostUsdc: number
+  inputTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
+  textFallbackReason?: string
+}
 
 interface WalletRow {
   id: string
@@ -60,8 +88,15 @@ function getComposerEstimatedCostUsdc(env: Env): number {
   return Number.isFinite(configured) && configured >= 0 ? configured : 0.0019
 }
 
-function buildComposerEconomics(env: Env) {
-  const cost = getComposerEstimatedCostUsdc(env)
+function buildComposerEconomics(
+  env: Env,
+  options?: {
+    estimatedModelCostUsdc?: number
+    aiProvider?: string
+    aiModel?: string
+  },
+) {
+  const cost = options?.estimatedModelCostUsdc ?? getComposerEstimatedCostUsdc(env)
   const price = ORACLE_PRICE_USDC.composer
 
   return {
@@ -69,8 +104,8 @@ function buildComposerEconomics(env: Env) {
     estimated_model_cost_usdc: cost,
     estimated_profit_usdc: Number((price - cost).toFixed(6)),
     oracle_wallet_address: getOracleWalletAddress(env, 'composer'),
-    ai_provider: 'Cloudflare Workers AI',
-    ai_model: 'minimax/music-2.6',
+    ai_provider: options?.aiProvider ?? 'Cloudflare Workers AI',
+    ai_model: options?.aiModel ?? (env.COMPOSER_MODEL ?? DEFAULT_MINIMAX_MODEL),
   }
 }
 
@@ -90,6 +125,7 @@ function buildComposerTrace(
     audioStored?: boolean
     saved?: boolean
     errorMessage?: string
+    textFallbackReason?: string
   },
 ): ProcessingTraceStep[] {
   const paymentExplorerUrl = isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined
@@ -117,19 +153,23 @@ function buildComposerTrace(
       status: options?.errorMessage ? 'error' : options?.processing || options?.audioStored || options?.saved ? 'success' : 'pending',
       detail: options?.errorMessage
         ? options.errorMessage
+        : options?.textFallbackReason
+          ? options.textFallbackReason
         : options?.processing || options?.audioStored || options?.saved
-          ? 'Cloudflare Workers AI accepted the MiniMax Music 2.6 generation request.'
-          : 'The queue consumer will invoke MiniMax Music 2.6 for one original song.',
+          ? `Cloudflare Workers AI accepted the ${env.COMPOSER_MODEL ?? DEFAULT_MINIMAX_MODEL} generation request.`
+          : `The queue consumer will invoke ${env.COMPOSER_MODEL ?? DEFAULT_MINIMAX_MODEL} for one original song.`,
     },
     {
       id: 'composer-audio-stored',
-      label: 'Stored MP3 in R2',
+      label: options?.textFallbackReason ? 'Audio Generation Skipped' : 'Stored MP3',
       status: options?.errorMessage ? 'error' : options?.audioStored || options?.saved ? 'success' : 'pending',
       detail: options?.errorMessage
         ? options.errorMessage
+        : options?.textFallbackReason
+          ? 'Composer saved a text song artifact because this Cloudflare account cannot run the requested music model yet.'
         : options?.audioStored || options?.saved
-          ? 'The generated MP3 was copied into the Composer audio bucket.'
-          : 'The generated audio URL will be fetched and persisted as an MP3.',
+          ? 'The generated audio URL was persisted for playback.'
+          : 'The generated audio URL will be fetched and persisted when audio storage is available.',
     },
     {
       id: 'composer-saved',
@@ -138,8 +178,8 @@ function buildComposerTrace(
       detail: options?.errorMessage
         ? options.errorMessage
         : options?.saved
-          ? 'The completed song was written to Supabase and is now visible in Codex and Gallery.'
-          : 'The Composer will save the artifact as soon as the song is stored.',
+          ? 'The completed Composer artifact was written to Supabase and is now visible in Codex and Gallery.'
+          : 'The Composer will save the artifact as soon as generation finishes.',
     },
   ]
 }
@@ -388,21 +428,13 @@ async function processComposerSession(sessionId: string, env: Env): Promise<void
       error_message: null,
     })
 
-    const ai = requireComposerAI(env)
-    const generation = await ai.run('minimax/music-2.6', {
-      prompt: session.prompt,
-      lyrics_optimizer: true,
-      is_instrumental: false,
-      format: 'mp3',
-    })
-    const generatedAudioUrl = extractAudioUrl(generation)
-
     const timestamp = nowIso()
-    const audioUrl = await storeComposerAudioIfAvailable(env, session.id, generatedAudioUrl)
+    const generation = await generateComposerArtifact(env, session)
     const processingTrace = buildComposerTrace(env, session, {
       processing: true,
-      audioStored: audioUrl !== generatedAudioUrl,
+      audioStored: generation.audioStored,
       saved: true,
+      textFallbackReason: generation.textFallbackReason,
     })
 
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
@@ -412,15 +444,22 @@ async function processComposerSession(sessionId: string, env: Env): Promise<void
         wallet_id: session.wallet_id,
         oracle_id: 'composer',
         prompt: session.prompt,
-        artifact_text: composerArtifactText(session.prompt),
+        artifact_text: generation.artifactText,
         artifact_image: null,
-        audio_url_1: audioUrl,
+        audio_url_1: generation.audioUrl,
         audio_url_2: null,
         composer_session_id: session.id,
         smol_job_id: null,
         tx_hash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : null,
         processing_trace: processingTrace,
-        ...buildComposerEconomics(env),
+        ...buildComposerEconomics(env, {
+          estimatedModelCostUsdc: generation.estimatedModelCostUsdc,
+          aiProvider: generation.aiProvider,
+          aiModel: generation.aiModel,
+        }),
+        input_tokens: generation.inputTokens,
+        output_tokens: generation.outputTokens,
+        total_tokens: generation.totalTokens,
       })
 
     if (insertError) {
@@ -439,6 +478,88 @@ async function processComposerSession(sessionId: string, env: Env): Promise<void
       error_message: message,
     })
   }
+}
+
+async function generateComposerArtifact(env: Env, session: ComposerSessionRow): Promise<ComposerGenerationResult> {
+  try {
+    const ai = requireComposerAI(env)
+    const model = env.COMPOSER_MODEL ?? DEFAULT_MINIMAX_MODEL
+    const generation = await ai.run(model, {
+      prompt: session.prompt,
+      lyrics_optimizer: true,
+      is_instrumental: false,
+      format: 'mp3',
+    })
+    const generatedAudioUrl = extractAudioUrl(generation)
+    const audioUrl = await storeComposerAudioIfAvailable(env, session.id, generatedAudioUrl)
+
+    return {
+      artifactText: composerArtifactText(session.prompt),
+      audioUrl,
+      audioStored: audioUrl !== generatedAudioUrl,
+      aiProvider: 'Cloudflare Workers AI',
+      aiModel: model,
+      estimatedModelCostUsdc: getComposerEstimatedCostUsdc(env),
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'MiniMax generation failed.'
+    return generateComposerTextFallback(env, session.prompt, reason)
+  }
+}
+
+async function generateComposerTextFallback(
+  env: Env,
+  prompt: string,
+  reason: string,
+): Promise<ComposerGenerationResult> {
+  const response = await fetch(`${GEMINI_BASE}/${COMPOSER_TEXT_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{
+          text: 'You are OracleHunt Composer. Write one complete, original song artifact for the user prompt. Include a title, short style note, lyrics with verses and chorus, and a concise production direction. Do not claim that audio was generated.',
+        }],
+      },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    }),
+  })
+  const json = await response.json() as GeminiComposerResponse
+  if (json.error) throw new Error(`Composer MiniMax failed (${reason}) and Gemini fallback failed: ${json.error.message}`)
+
+  const artifactText = json.candidates?.[0]?.content?.parts?.find(part => part.text)?.text?.trim()
+  if (!artifactText) {
+    throw new Error(`Composer MiniMax failed (${reason}) and Gemini fallback returned empty content.`)
+  }
+
+  const inputTokens = json.usageMetadata?.promptTokenCount ?? null
+  const outputTokens = json.usageMetadata?.candidatesTokenCount ?? null
+  const estimatedCost = estimateGeminiComposerCost(inputTokens, outputTokens)
+
+  return {
+    artifactText,
+    audioUrl: null,
+    audioStored: false,
+    aiProvider: 'Google Gemini',
+    aiModel: COMPOSER_TEXT_MODEL,
+    estimatedModelCostUsdc: estimatedCost,
+    inputTokens,
+    outputTokens,
+    totalTokens: json.usageMetadata?.totalTokenCount ?? null,
+    textFallbackReason: `MiniMax audio generation is unavailable on this Cloudflare account (${reason}). Composer completed with a Gemini song artifact instead.`,
+  }
+}
+
+function estimateGeminiComposerCost(inputTokens: number | null, outputTokens: number | null): number {
+  const input = inputTokens ?? 900
+  const output = outputTokens ?? 700
+  return Number((
+    (input / 1_000_000) * GEMINI_FLASH_INPUT_PER_MILLION_USDC
+    + (output / 1_000_000) * GEMINI_FLASH_OUTPUT_PER_MILLION_USDC
+  ).toFixed(6))
 }
 
 function extractAudioUrl(result: unknown): string {

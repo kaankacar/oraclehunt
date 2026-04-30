@@ -280,6 +280,10 @@ async function deriveFingerprint(
   }
 
   const returnValue = xdr.ScVal.fromXDR(result.returnValueXdr, 'base64')
+  if (returnValue.switch().name !== 'scvBytes') {
+    throw new Error('Hidden Oracle derive returned non-byte fingerprint')
+  }
+
   const fingerprintBytes = returnValue.bytes()
   if (!fingerprintBytes) {
     throw new Error('Hidden Oracle derive returned non-byte fingerprint')

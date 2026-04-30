@@ -123,25 +123,59 @@ async function getStellaAnswer(req: OracleRequest, env: Env): Promise<string> {
       Authorization: `Bearer ${env.STELLA_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ query: req.prompt, prompt: req.prompt }),
+    body: JSON.stringify({
+      query: req.prompt,
+      prompt: req.prompt,
+      message: req.prompt,
+      messages: [{ role: 'user', content: req.prompt }],
+    }),
   })
   const json = await response.json().catch(() => ({})) as {
     answer?: string
     context?: string
     text?: string
     result?: string
+    output?: string
+    content?: string
+    data?: unknown
+    message?: { content?: string } | string
+    messages?: Array<{ content?: string } | string>
   }
 
   if (!response.ok) {
     throw new Error(`Scholar/Stella is unavailable: HTTP ${response.status}`)
   }
 
-  const answer = json.answer ?? json.text ?? json.result ?? json.context
+  const answer = extractStellaText(json)
   if (!answer?.trim()) {
     throw new Error('Scholar/Stella is unavailable: Stella returned empty content.')
   }
 
   return answer.trim()
+}
+
+function extractStellaText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object') return undefined
+
+  const record = value as Record<string, unknown>
+  for (const key of ['answer', 'text', 'result', 'context', 'output', 'content']) {
+    if (typeof record[key] === 'string') return record[key] as string
+  }
+
+  if (record.message) {
+    const messageText = extractStellaText(record.message)
+    if (messageText) return messageText
+  }
+
+  if (Array.isArray(record.messages)) {
+    for (let i = record.messages.length - 1; i >= 0; i -= 1) {
+      const messageText = extractStellaText(record.messages[i])
+      if (messageText) return messageText
+    }
+  }
+
+  return extractStellaText(record.data)
 }
 
 function estimateGeminiCostUsdc(
@@ -158,15 +192,21 @@ function estimateGeminiCostUsdc(
   ).toFixed(6))
 }
 
-function buildEconomics(env: Env, oracleId: OracleId, estimatedCost: number) {
+function buildEconomics(
+  env: Env,
+  oracleId: OracleId,
+  estimatedCost: number,
+  aiProvider = 'Google Gemini',
+  aiModel = oracleId === 'painter' ? IMAGE_MODEL : TEXT_MODEL,
+) {
   const price = ORACLE_PRICE_USDC[oracleId]
   return {
     payment_amount_usdc: price,
     estimated_model_cost_usdc: estimatedCost,
     estimated_profit_usdc: Number((price - estimatedCost).toFixed(6)),
     oracle_wallet_address: getOracleWalletAddress(env, oracleId),
-    ai_provider: 'Google Gemini',
-    ai_model: oracleId === 'painter' ? IMAGE_MODEL : TEXT_MODEL,
+    ai_provider: aiProvider,
+    ai_model: aiModel,
   }
 }
 
@@ -264,6 +304,9 @@ export async function handleOracle(
   let candidateTokenCount: number | undefined
   let totalTokenCount: number | undefined
   let oracleTraceDetail: string | undefined
+  let aiProvider = 'Google Gemini'
+  let aiModel = oracleId === 'painter' ? IMAGE_MODEL : TEXT_MODEL
+  let estimatedModelCost: number | undefined
 
   if (oracleId === 'painter') {
     const imageResult = await geminiImage(
@@ -277,11 +320,24 @@ export async function handleOracle(
     totalTokenCount = imageResult.totalTokenCount
   } else {
     if (oracleId === 'scholar') {
-      artifact = await getStellaAnswer(req, env)
-      oracleTraceDetail = 'Scholar returned Stella’s answer directly without Gemini rewriting or personality styling.'
-      promptTokenCount = 0
-      candidateTokenCount = 0
-      totalTokenCount = 0
+      try {
+        artifact = await getStellaAnswer(req, env)
+        oracleTraceDetail = 'Scholar returned Stella answer directly without Gemini rewriting or personality styling.'
+        promptTokenCount = 0
+        candidateTokenCount = 0
+        totalTokenCount = 0
+        estimatedModelCost = 0
+        aiProvider = 'Stella'
+        aiModel = 'stella'
+      } catch (error) {
+        const textResult = await geminiText(env.GEMINI_API_KEY, ORACLE_PROMPTS.scholar, req.prompt)
+        artifact = textResult.text
+        promptTokenCount = textResult.promptTokenCount
+        candidateTokenCount = textResult.candidateTokenCount
+        totalTokenCount = textResult.totalTokenCount
+        const stellaReason = error instanceof Error ? error.message : 'Stella is unavailable.'
+        oracleTraceDetail = `Scholar used Gemini ${TEXT_MODEL} because ${stellaReason}`
+      }
     } else {
       const systemPrompt = buildPersonalizedPrompt(oracleId, ORACLE_PROMPTS[oracleId], req.personality)
       const textResult = await geminiText(env.GEMINI_API_KEY, systemPrompt, req.prompt)
@@ -296,14 +352,8 @@ export async function handleOracle(
   const processingTrace = buildPublicOracleTrace(env, oracleId, txHash, {
     oracleDetail: oracleTraceDetail,
   })
-  const estimatedModelCost = estimateGeminiCostUsdc(oracleId, { promptTokenCount, candidateTokenCount })
-  const economics = oracleId === 'scholar'
-    ? {
-        ...buildEconomics(env, oracleId, 0),
-        ai_provider: 'Stella',
-        ai_model: 'stella',
-      }
-    : buildEconomics(env, oracleId, estimatedModelCost)
+  const modelCost = estimatedModelCost ?? estimateGeminiCostUsdc(oracleId, { promptTokenCount, candidateTokenCount })
+  const economics = buildEconomics(env, oracleId, modelCost, aiProvider, aiModel)
 
   const { data: inserted, error: insertError } = await supabase
     .from('consultations')

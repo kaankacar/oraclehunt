@@ -43,6 +43,7 @@ export interface Env {
   AI?: WorkersAI
   COMPOSER_AUDIO?: ComposerAudioBucket
   COMPOSER_QUEUE?: ComposerQueueBinding
+  COMPOSER_MODEL?: string
   ORACLE_WALLET_SEER?: string
   ORACLE_WALLET_PAINTER?: string
   ORACLE_WALLET_COMPOSER?: string
