@@ -44,6 +44,12 @@ export interface PersistedOracleResponse extends OracleResponse {
   consultationId: string
 }
 
+interface StellaThreadResponse {
+  id?: string
+  error?: string
+  message?: string
+}
+
 async function geminiText(apiKey: string, systemPrompt: string, userMessage: string): Promise<GeminiTextResult> {
   const res = await fetch(`${GEMINI_BASE}/${TEXT_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
@@ -117,41 +123,75 @@ async function getStellaAnswer(req: OracleRequest, env: Env): Promise<string> {
     throw new Error('Scholar/Stella is unavailable: Stella env vars are not configured.')
   }
 
-  const response = await fetch(env.STELLA_API_URL, {
+  const threadsUrl = env.STELLA_API_URL.replace(/\/+$/, '')
+  const headers = {
+    'x-api-key': env.STELLA_API_KEY,
+    'Content-Type': 'application/json',
+  }
+  const threadResponse = await fetch(threadsUrl, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.STELLA_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
-      query: req.prompt,
-      prompt: req.prompt,
-      message: req.prompt,
       messages: [{ role: 'user', content: req.prompt }],
     }),
   })
-  const json = await response.json().catch(() => ({})) as {
-    answer?: string
-    context?: string
-    text?: string
-    result?: string
-    output?: string
-    content?: string
-    data?: unknown
-    message?: { content?: string } | string
-    messages?: Array<{ content?: string } | string>
+  const threadJson = await threadResponse.json().catch(() => ({})) as StellaThreadResponse
+  if (!threadResponse.ok || !threadJson.id) {
+    throw new Error(`Scholar/Stella is unavailable: ${threadJson.message ?? threadJson.error ?? `HTTP ${threadResponse.status}`}`)
   }
 
-  if (!response.ok) {
-    throw new Error(`Scholar/Stella is unavailable: HTTP ${response.status}`)
+  const messageResponse = await fetch(`${threadsUrl}/${encodeURIComponent(threadJson.id)}/messages`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ role: 'user', content: req.prompt }),
+  })
+  if (!messageResponse.ok) {
+    const messageJson = await messageResponse.json().catch(() => ({})) as StellaThreadResponse
+    throw new Error(`Scholar/Stella is unavailable: ${messageJson.message ?? messageJson.error ?? `HTTP ${messageResponse.status}`}`)
   }
 
-  const answer = extractStellaText(json)
+  const runResponse = await fetch(`${threadsUrl}/${encodeURIComponent(threadJson.id)}/runs`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({}),
+  })
+  const runText = await runResponse.text()
+  if (!runResponse.ok) {
+    const runJson = parseJson(runText) as StellaThreadResponse | undefined
+    throw new Error(`Scholar/Stella is unavailable: ${runJson?.message ?? runJson?.error ?? `HTTP ${runResponse.status}`}`)
+  }
+
+  const answer = parseStellaRunText(runText)
   if (!answer?.trim()) {
     throw new Error('Scholar/Stella is unavailable: Stella returned empty content.')
   }
 
   return answer.trim()
+}
+
+function parseStellaRunText(text: string): string | undefined {
+  const json = parseJson(text)
+  const directText = extractStellaText(json)
+  if (directText) return directText
+
+  const chunks: string[] = []
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith('data:')) continue
+    const payload = parseJson(line.slice(5).trim()) as { type?: string; content?: string } | undefined
+    if (payload?.type === 'content' && typeof payload.content === 'string') {
+      chunks.push(payload.content)
+    }
+  }
+
+  return chunks.join('')
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
 function extractStellaText(value: unknown): string | undefined {
