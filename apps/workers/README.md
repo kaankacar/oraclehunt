@@ -6,7 +6,7 @@ It owns:
 
 - x402 payment gating for public oracles
 - Gemini/Stella-backed public oracle execution
-- Composer orchestration with Cloudflare MiniMax, Queues, and R2
+- Composer orchestration with Cloudflare MiniMax and Queues
 - Hidden Oracle challenge issuance and proof verification
 - Supabase writes using the service key
 - local/testnet faucet support
@@ -130,7 +130,7 @@ Flow:
 3. enqueue one Composer generation message
 4. return `pending` with the session id
 5. queue consumer calls `env.AI.run('minimax/music-2.6', ...)`
-6. store the MP3 in R2
+6. use the generated audio URL directly; when R2 is enabled, the existing code path can store the MP3 there
 7. once finished, persist consultation with:
    - `audio_url_1`
    - `audio_url_2 = null`

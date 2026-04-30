@@ -107,7 +107,7 @@ Stellar is used for:
 1. User pays for the Composer through x402 like any other public oracle.
 2. Worker creates a queued Composer session and enqueues one MiniMax Music 2.6 generation.
 3. Worker returns `pending`, and the page polls the session id.
-4. The queue consumer stores the generated MP3 in R2.
+4. The queue consumer saves the generated song URL.
 5. On completion, one audio URL is persisted to Supabase and rendered like a normal artifact.
 
 ## Current Runtime Identifiers

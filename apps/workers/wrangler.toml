@@ -6,10 +6,6 @@ compatibility_flags = ["nodejs_compat"]
 [ai]
 binding = "AI"
 
-[[r2_buckets]]
-binding = "COMPOSER_AUDIO"
-bucket_name = "oraclehunt-composer-audio"
-
 [[queues.producers]]
 binding = "COMPOSER_QUEUE"
 queue = "oraclehunt-composer"

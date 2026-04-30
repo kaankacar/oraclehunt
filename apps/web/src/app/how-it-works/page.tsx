@@ -55,8 +55,8 @@ export default function HowItWorksPage() {
             Stellar-specific questions.
           </Info>
           <Info title="Composer">
-            Composer queues one Cloudflare MiniMax Music 2.6 generation, stores the MP3 in R2,
-            then the page polls until the song is ready.
+            Composer queues one Cloudflare MiniMax Music 2.6 generation, then the page polls
+            until the song is ready.
           </Info>
           <Info title="Hidden Oracle">
             Hidden Oracle keeps its separate proof flow. It is passphrase-gated, writes zero-knowledge

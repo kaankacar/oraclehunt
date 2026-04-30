@@ -389,7 +389,6 @@ async function processComposerSession(sessionId: string, env: Env): Promise<void
     })
 
     const ai = requireComposerAI(env)
-    const audioBucket = requireComposerAudioBucket(env)
     const generation = await ai.run('minimax/music-2.6', {
       prompt: session.prompt,
       lyrics_optimizer: true,
@@ -398,22 +397,11 @@ async function processComposerSession(sessionId: string, env: Env): Promise<void
     })
     const generatedAudioUrl = extractAudioUrl(generation)
 
-    const audioResponse = await fetch(generatedAudioUrl)
-    if (!audioResponse.ok) {
-      throw new Error(`MiniMax audio fetch failed with HTTP ${audioResponse.status}`)
-    }
-
-    const audioBytes = await audioResponse.arrayBuffer()
-    const audioKey = `${session.id}.mp3`
-    await audioBucket.put(audioKey, audioBytes, {
-      httpMetadata: { contentType: 'audio/mpeg' },
-    })
-
     const timestamp = nowIso()
-    const audioUrl = composerAudioUrl(env, audioKey)
+    const audioUrl = await storeComposerAudioIfAvailable(env, session.id, generatedAudioUrl)
     const processingTrace = buildComposerTrace(env, session, {
       processing: true,
-      audioStored: true,
+      audioStored: audioUrl !== generatedAudioUrl,
       saved: true,
     })
 
@@ -474,8 +462,31 @@ function collectStrings(value: unknown): string[] {
   return out
 }
 
+async function storeComposerAudioIfAvailable(env: Env, sessionId: string, generatedAudioUrl: string): Promise<string> {
+  if (!env.COMPOSER_AUDIO) {
+    return generatedAudioUrl
+  }
+
+  const audioResponse = await fetch(generatedAudioUrl)
+  if (!audioResponse.ok) {
+    throw new Error(`MiniMax audio fetch failed with HTTP ${audioResponse.status}`)
+  }
+
+  const audioBytes = await audioResponse.arrayBuffer()
+  const audioKey = `${sessionId}.mp3`
+  await env.COMPOSER_AUDIO.put(audioKey, audioBytes, {
+    httpMetadata: { contentType: 'audio/mpeg' },
+  })
+
+  return composerAudioUrl(env, audioKey)
+}
+
 export async function getComposerAudio(env: Env, key: string): Promise<Response> {
-  const object = await requireComposerAudioBucket(env).get(key)
+  if (!env.COMPOSER_AUDIO) {
+    return new Response('Composer audio bucket is not configured', { status: 503 })
+  }
+
+  const object = await env.COMPOSER_AUDIO.get(key)
   if (!object) {
     return new Response('Not found', { status: 404 })
   }
@@ -493,13 +504,6 @@ function requireComposerAI(env: Env) {
     throw new Error('Composer AI binding is not configured')
   }
   return env.AI
-}
-
-function requireComposerAudioBucket(env: Env) {
-  if (!env.COMPOSER_AUDIO) {
-    throw new Error('Composer audio bucket binding is not configured')
-  }
-  return env.COMPOSER_AUDIO
 }
 
 function requireComposerQueue(env: Env) {
