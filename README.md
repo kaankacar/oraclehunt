@@ -58,7 +58,7 @@ The Next app owns:
 The Cloudflare Worker owns:
 
 - x402 payment verification for public oracle endpoints
-- oracle execution against Gemini, Stella, or fal.ai Composer music generation
+- oracle execution against OpenAI, Stella, Gemini Hidden Oracle rendering, or fal.ai Composer music generation
 - persistence into Supabase using the service key
 - Hidden Oracle challenge issuance and proof verification on Soroban
 - testnet faucet funding for new wallets
@@ -92,7 +92,7 @@ Stellar is used for:
 3. Worker responds through x402 middleware with payment requirements.
 4. Browser signs the USDC payment with the passkey wallet.
 5. Worker verifies the payment.
-6. Worker calls Gemini, Stella, or the Composer music flow depending on the oracle.
+6. Worker calls OpenAI, Stella, Gemini Hidden Oracle rendering, or the Composer music flow depending on the oracle.
 7. Worker writes the consultation to Supabase.
 8. Frontend renders the artifact and execution trace.
 

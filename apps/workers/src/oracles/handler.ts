@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
-import { ORACLE_PROMPTS, PAINTER_IMAGE_PROMPT } from './prompts'
+import { ORACLE_PROMPTS, PAINTER_STYLE_PROMPTS } from './prompts'
 import type {
   OracleId,
   Env,
   OracleRequest,
   OracleResponse,
+  PainterStyle,
   ProcessingTraceStep,
 } from '../types'
 import { getTxExplorerUrl } from '../stellar'
@@ -13,10 +14,18 @@ import { ORACLE_PRICE_USDC, getOracleWalletAddress } from '../middleware/payment
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 const TEXT_MODEL = 'gemini-2.5-flash'
 const IMAGE_MODEL = 'gemini-2.5-flash-image'
+const OPENAI_BASE = 'https://api.openai.com/v1'
+const OPENAI_TEXT_MODEL = 'gpt-5.4-mini'
+const OPENAI_IMAGE_MODEL = 'gpt-image-2'
 const TEXT_ORACLES_WITH_PERSONALITY = new Set<OracleId>(['seer', 'scribe', 'informant'])
 const GEMINI_FLASH_INPUT_PER_MILLION_USDC = 0.30
 const GEMINI_FLASH_OUTPUT_PER_MILLION_USDC = 2.50
 const GEMINI_IMAGE_ESTIMATED_COST_USDC = 0.039
+const OPENAI_TEXT_INPUT_PER_MILLION_USDC = 0.75
+const OPENAI_TEXT_OUTPUT_PER_MILLION_USDC = 4.50
+const OPENAI_IMAGE_TEXT_INPUT_PER_MILLION_USDC = 5.00
+const OPENAI_IMAGE_OUTPUT_PER_MILLION_USDC = 30.00
+const OPENAI_IMAGE_ESTIMATED_COST_USDC = 0.04
 
 interface GeminiPart {
   text?: string
@@ -38,6 +47,43 @@ interface GeminiTextResult {
   promptTokenCount?: number
   candidateTokenCount?: number
   totalTokenCount?: number
+}
+
+interface OpenAIResponseOutputText {
+  type?: string
+  text?: string
+}
+
+interface OpenAIResponseOutput {
+  type?: string
+  content?: OpenAIResponseOutputText[]
+}
+
+interface OpenAITextResponse {
+  output_text?: string
+  output?: OpenAIResponseOutput[]
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    total_tokens?: number
+  }
+  error?: { message: string }
+}
+
+interface OpenAIImageData {
+  b64_json?: string
+  url?: string
+  revised_prompt?: string
+}
+
+interface OpenAIImageResponse {
+  data?: OpenAIImageData[]
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    total_tokens?: number
+  }
+  error?: { message: string }
 }
 
 export interface PersistedOracleResponse extends OracleResponse {
@@ -102,6 +148,111 @@ async function geminiImage(
   }
 
   throw new Error('Painter generation returned no image. Please try again.')
+}
+
+async function openaiText(apiKey: string | undefined, systemPrompt: string, userMessage: string): Promise<GeminiTextResult> {
+  if (!apiKey) throw new Error('OpenAI is unavailable: OPENAI_API_KEY is not configured.')
+
+  const res = await fetch(`${OPENAI_BASE}/responses`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OPENAI_TEXT_MODEL,
+      instructions: systemPrompt,
+      input: userMessage,
+      max_output_tokens: 700,
+    }),
+  })
+  const json = await res.json().catch(() => ({})) as OpenAITextResponse
+  if (!res.ok || json.error) {
+    throw new Error(`OpenAI error: ${json.error?.message ?? `HTTP ${res.status}`}`)
+  }
+
+  const text = extractOpenAIText(json)
+  if (!text.trim()) throw new Error('OpenAI returned empty text.')
+
+  return {
+    text,
+    promptTokenCount: json.usage?.input_tokens,
+    candidateTokenCount: json.usage?.output_tokens,
+    totalTokenCount: json.usage?.total_tokens,
+  }
+}
+
+async function openaiImage(
+  apiKey: string | undefined,
+  prompt: string,
+): Promise<GeminiTextResult & { imageDataUrl?: string }> {
+  if (!apiKey) throw new Error('OpenAI is unavailable: OPENAI_API_KEY is not configured.')
+
+  const res = await fetch(`${OPENAI_BASE}/images/generations`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OPENAI_IMAGE_MODEL,
+      prompt,
+      size: '1024x1024',
+      quality: 'medium',
+      n: 1,
+    }),
+  })
+  const json = await res.json().catch(() => ({})) as OpenAIImageResponse
+  if (!res.ok || json.error) {
+    throw new Error(`OpenAI image error: ${json.error?.message ?? `HTTP ${res.status}`}`)
+  }
+
+  const image = json.data?.[0]
+  if (!image?.b64_json && !image?.url) {
+    throw new Error('Painter generation returned no image. Please try again.')
+  }
+
+  const imageDataUrl = image.b64_json
+    ? `data:image/png;base64,${image.b64_json}`
+    : await imageUrlToDataUrl(image.url as string)
+
+  return {
+    text: image.revised_prompt ?? 'Your image has been rendered.',
+    imageDataUrl,
+    promptTokenCount: json.usage?.input_tokens,
+    candidateTokenCount: json.usage?.output_tokens,
+    totalTokenCount: json.usage?.total_tokens,
+  }
+}
+
+function extractOpenAIText(json: OpenAITextResponse): string {
+  if (typeof json.output_text === 'string') return json.output_text
+
+  const chunks: string[] = []
+  for (const output of json.output ?? []) {
+    for (const content of output.content ?? []) {
+      if ((content.type === 'output_text' || content.type === 'text') && content.text) {
+        chunks.push(content.text)
+      }
+    }
+  }
+
+  return chunks.join('\n').trim()
+}
+
+async function imageUrlToDataUrl(url: string): Promise<string> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Painter generated an image URL but it could not be fetched: HTTP ${response.status}`)
+
+  const contentType = response.headers.get('content-type') ?? 'image/png'
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+
+  return `data:${contentType};base64,${btoa(binary)}`
 }
 
 function buildPersonalizedPrompt(oracleId: OracleId, basePrompt: string, personality: OracleRequest['personality']): string {
@@ -249,6 +400,32 @@ function estimateGeminiCostUsdc(
   ).toFixed(6))
 }
 
+function estimateOpenAITextCostUsdc(
+  usage?: Pick<GeminiTextResult, 'promptTokenCount' | 'candidateTokenCount'>,
+): number {
+  const inputTokens = usage?.promptTokenCount ?? 900
+  const outputTokens = usage?.candidateTokenCount ?? 500
+  return Number((
+    (inputTokens / 1_000_000) * OPENAI_TEXT_INPUT_PER_MILLION_USDC
+    + (outputTokens / 1_000_000) * OPENAI_TEXT_OUTPUT_PER_MILLION_USDC
+  ).toFixed(6))
+}
+
+function estimateOpenAIImageCostUsdc(
+  usage?: Pick<GeminiTextResult, 'promptTokenCount' | 'candidateTokenCount'>,
+): number {
+  if (!usage?.promptTokenCount && !usage?.candidateTokenCount) return OPENAI_IMAGE_ESTIMATED_COST_USDC
+
+  return Number((
+    ((usage.promptTokenCount ?? 0) / 1_000_000) * OPENAI_IMAGE_TEXT_INPUT_PER_MILLION_USDC
+    + ((usage.candidateTokenCount ?? 0) / 1_000_000) * OPENAI_IMAGE_OUTPUT_PER_MILLION_USDC
+  ).toFixed(6))
+}
+
+function getPainterStyle(value: PainterStyle | undefined): PainterStyle {
+  return value && value in PAINTER_STYLE_PROMPTS ? value : 'default'
+}
+
 function buildEconomics(
   env: Env,
   oracleId: OracleId,
@@ -325,8 +502,8 @@ function buildPublicOracleTrace(
       status: 'success',
       detail: options?.oracleDetail ?? (
         oracleId === 'painter'
-          ? 'Gemini image generation returned the portrait and caption.'
-          : `Gemini ${TEXT_MODEL} returned the oracle artifact.`
+          ? `OpenAI ${OPENAI_IMAGE_MODEL} returned the portrait.`
+          : `OpenAI ${OPENAI_TEXT_MODEL} returned the oracle artifact.`
       ),
     },
     {
@@ -361,20 +538,23 @@ export async function handleOracle(
   let candidateTokenCount: number | undefined
   let totalTokenCount: number | undefined
   let oracleTraceDetail: string | undefined
-  let aiProvider = 'Google Gemini'
-  let aiModel = oracleId === 'painter' ? IMAGE_MODEL : TEXT_MODEL
+  let aiProvider = 'OpenAI'
+  let aiModel = oracleId === 'painter' ? OPENAI_IMAGE_MODEL : OPENAI_TEXT_MODEL
   let estimatedModelCost: number | undefined
 
   if (oracleId === 'painter') {
-    const imageResult = await geminiImage(
-      env.GEMINI_API_KEY,
-      `${PAINTER_IMAGE_PROMPT}\n\nSubject: ${req.prompt}`,
+    const painterStyle = getPainterStyle(req.painterStyle)
+    const imageResult = await openaiImage(
+      env.OPENAI_API_KEY,
+      `${PAINTER_STYLE_PROMPTS[painterStyle]}\n\nSubject: ${req.prompt}`,
     )
     artifact = imageResult.text || 'Your pixel art portrait has been rendered.'
     artifactImage = imageResult.imageDataUrl
     promptTokenCount = imageResult.promptTokenCount
     candidateTokenCount = imageResult.candidateTokenCount
     totalTokenCount = imageResult.totalTokenCount
+    oracleTraceDetail = `OpenAI ${OPENAI_IMAGE_MODEL} rendered the Painter image using the ${painterStyle.replace(/_/g, ' ')} style.`
+    estimatedModelCost = estimateOpenAIImageCostUsdc({ promptTokenCount, candidateTokenCount })
   } else {
     if (oracleId === 'scholar') {
       try {
@@ -394,14 +574,17 @@ export async function handleOracle(
         totalTokenCount = textResult.totalTokenCount
         const stellaReason = error instanceof Error ? error.message : 'Stella is unavailable.'
         oracleTraceDetail = `Stella used Gemini ${TEXT_MODEL} fallback because ${stellaReason}`
+        aiProvider = 'Google Gemini'
+        aiModel = TEXT_MODEL
       }
     } else {
       const systemPrompt = buildPersonalizedPrompt(oracleId, ORACLE_PROMPTS[oracleId], req.personality)
-      const textResult = await geminiText(env.GEMINI_API_KEY, systemPrompt, req.prompt)
+      const textResult = await openaiText(env.OPENAI_API_KEY, systemPrompt, req.prompt)
       artifact = textResult.text
       promptTokenCount = textResult.promptTokenCount
       candidateTokenCount = textResult.candidateTokenCount
       totalTokenCount = textResult.totalTokenCount
+      estimatedModelCost = estimateOpenAITextCostUsdc({ promptTokenCount, candidateTokenCount })
     }
   }
 

@@ -58,6 +58,12 @@ Guardrails: You speak only in riddles and you always embed the hidden clue. If t
 
 /**
  * Image generation prompt for The Painter oracle.
- * Instructs Gemini to produce an actual pixel art image.
+ * Instructs the image provider to produce the default Painter style.
  */
 export const PAINTER_IMAGE_PROMPT = `You are The Painter, master of the pixel art form. Generate a vivid pixel art image of the subject described below. Use a limited 16-color palette, crisp pixel-perfect edges, strong contrast, and a clear foreground/background composition evoking classic 8-bit and 16-bit video game art. The image should feel nostalgic and luminous, as if rendered on a glowing CRT screen.`
+
+export const PAINTER_STYLE_PROMPTS = {
+  default: PAINTER_IMAGE_PROMPT,
+  playing_cards: `Create the subject as an ornate illustrated playing card. Use a clean card border, mirrored decorative composition where appropriate, crisp suit-like symbols, restrained casino-card colors, and a premium collectible deck feel. The final image should look like it belongs on a physical playing card, not a generic poster.`,
+  bad_ms_paint: `Redraw the subject in the clumsiest possible low-quality desktop paint style. Use a plain white background, awkward mouse-drawn lines, scribbly uneven shapes, crude bucket-fill colors, visible pixel-by-pixel roughness, and intentionally confused proportions. It should be vaguely similar to the requested subject but noticeably off, embarrassing, and amateur, as if made quickly in old MS Paint.`,
+} as const

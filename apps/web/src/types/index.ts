@@ -1,5 +1,6 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant' | 'hidden'
 export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
+export type PainterStyle = 'default' | 'playing_cards' | 'bad_ms_paint'
 
 export interface OracleMeta {
   id: OracleId

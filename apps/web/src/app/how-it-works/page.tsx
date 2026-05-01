@@ -39,7 +39,7 @@ const TECH_DETAILS = [
   },
   {
     title: 'Different AI providers',
-    body: 'Most text and image hosts use the current Gemini routes. Stella answers directly from its Stellar knowledge service. Composer submits one fal.ai ACE-Step music job and polls until the song URL and lyrics are ready.',
+    body: 'Seer, Scribe, and Informant use OpenAI GPT-5.4 mini. Painter uses GPT Image 2 with selectable styles. Stella answers directly from its Stellar knowledge service, and Composer submits one fal.ai ACE-Step music job.',
   },
   {
     title: 'Codex, Gallery, Leaderboard',

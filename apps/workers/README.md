@@ -5,7 +5,7 @@ This app is the Cloudflare Worker backend for Oracle Hunt.
 It owns:
 
 - x402 payment gating for public oracles
-- Gemini/Stella-backed public oracle execution
+- OpenAI/Stella-backed public oracle execution
 - Composer orchestration with fal.ai ACE-Step
 - Hidden Oracle challenge issuance and proof verification
 - Supabase writes using the service key
@@ -107,7 +107,8 @@ Owned in:
 Behavior:
 
 - looks up the wallet in Supabase
-- calls Gemini text or image generation
+- calls OpenAI for Seer, Scribe, Informant, and Painter
+- calls Stella directly for Stellar answers
 - writes a consultation row
 - emits a processing trace
 

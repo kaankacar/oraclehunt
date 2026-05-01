@@ -1,8 +1,10 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant'
 export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
+export type PainterStyle = 'default' | 'playing_cards' | 'bad_ms_paint'
 
 export interface Env {
   GEMINI_API_KEY: string
+  OPENAI_API_KEY?: string
   ORACLE_TREASURY_ADDRESS: string
   ORACLE_TREASURY_SECRET?: string
   USDC_CONTRACT: string
@@ -30,6 +32,7 @@ export interface OracleRequest {
   prompt: string
   walletAddress: string
   personality?: OraclePersonality
+  painterStyle?: PainterStyle
 }
 
 export interface OracleResponse {

@@ -9,6 +9,7 @@ import {
   type OracleMeta,
   type Consultation,
   type OraclePersonality,
+  type PainterStyle,
   type ProcessingTraceStep,
 } from '@/types'
 import { useWallet } from '@/components/WalletProvider'
@@ -122,6 +123,12 @@ const PERSONALITIES: Array<{ id: OraclePersonality; label: string }> = [
   { id: 'crypto_degen', label: 'Crypto Degen' },
 ]
 
+const PAINTER_STYLES: Array<{ id: PainterStyle; label: string }> = [
+  { id: 'default', label: 'Pixel Art' },
+  { id: 'playing_cards', label: 'Playing Cards' },
+  { id: 'bad_ms_paint', label: 'Mouse Paint' },
+]
+
 export default function OraclePage() {
   const params = useParams()
   const oracleId = params['id'] as string
@@ -134,6 +141,7 @@ export default function OraclePage() {
   const [history, setHistory] = useState<Consultation[]>([])
   const [liveTrace, setLiveTrace] = useState<ProcessingTraceStep[]>([])
   const [personality, setPersonality] = useState<OraclePersonality>('default')
+  const [painterStyle, setPainterStyle] = useState<PainterStyle>('default')
   const [isLoading, setIsLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Consulting…')
   const [error, setError] = useState('')
@@ -167,6 +175,7 @@ export default function OraclePage() {
     try {
       const data = await consultOracle(oracleId, prompt, address, {
         personality,
+        ...(oracleId === 'painter' ? { painterStyle } : {}),
         onProgress: (event) => {
           setLiveTrace((prev) => advancePublicTrace(prev, event))
         },
@@ -251,6 +260,7 @@ export default function OraclePage() {
       } as Consultation)
     : null
   const showPersonalityControls = PERSONALITY_ORACLE_IDS.includes(oracleId as typeof PERSONALITY_ORACLE_IDS[number])
+  const showPainterStyleControls = oracleId === 'painter'
   const visibleTrace = liveTrace.length ? liveTrace : result?.processingTrace ?? getTraceTemplate(oracleId)
 
   return (
@@ -369,6 +379,29 @@ export default function OraclePage() {
                   </div>
                 </div>
               )}
+              {showPainterStyleControls && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-navy/45 mb-2">
+                    Style
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {PAINTER_STYLES.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setPainterStyle(option.id)}
+                        className={`min-h-10 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                          painterStyle === option.id
+                            ? 'border-accent bg-accent text-white'
+                            : 'border-accent/15 bg-light-blue/50 text-navy/65 hover:border-accent/35'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -440,6 +473,7 @@ export default function OraclePage() {
                       setPrompt('')
                       setLiveTrace([])
                       setError('')
+                      setPainterStyle('default')
                     }}
                     className={
                       themed
