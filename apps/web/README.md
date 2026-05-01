@@ -72,7 +72,7 @@ Shared public-oracle page for:
 Notes:
 
 - all public oracles pay through x402
-- Composer links the wallet to Smol when needed, starts a Smol song workflow, and polls asynchronously
+- Composer starts a fal.ai ACE-Step music job and polls asynchronously
 - Stella returns answers directly from the Stella knowledge service
 - Informant shows previous Informant answers for the current wallet
 

@@ -6,7 +6,7 @@ It owns:
 
 - x402 payment gating for public oracles
 - Gemini/Stella-backed public oracle execution
-- Composer orchestration with Smol
+- Composer orchestration with fal.ai ACE-Step
 - Hidden Oracle challenge issuance and proof verification
 - Supabase writes using the service key
 - local/testnet faucet support
@@ -21,7 +21,7 @@ This file wires:
 - global error handling
 - x402 middleware
 - oracle routes
-- composer resume/status routes
+- composer status routes
 - Hidden Oracle routes
 - health and faucet routes
 
@@ -117,19 +117,19 @@ Owned in:
 
 - `src/oracles/composer.ts`
 
-Composer diverges from the shared path because it is async and uses Smol's song workflow.
+Composer diverges from the shared path because it is async and uses fal.ai's ACE-Step music model.
 
 Flow:
 
 1. verify x402 payment
 2. create or load a `composer_sessions` row
-3. if the wallet has no active Smol JWT, return `smol-auth-required`
-4. after the frontend completes Smol auth, start the Smol workflow and return `pending` with the Smol job id
-5. poll Smol until lyrics, cover art, and two audio tracks are ready
+3. submit a fal.ai queue job for `fal-ai/ace-step/prompt-to-audio`
+4. return `pending` with the Composer session id
+5. poll fal.ai until the generated lyrics and hosted audio URL are ready
 6. once finished, persist consultation with:
    - `audio_url_1`
-   - `audio_url_2`
-   - `smol_job_id`
+   - generated lyric text
+   - provider request id in the legacy `smol_job_id` column
 
 ### Hidden Oracle
 
@@ -169,13 +169,14 @@ Important ones:
 - `HIDDEN_ORACLE_VERIFIER_CONTRACT_ID`
 - `INFORMANT_PASSPHRASE`
 - `ADMIN_CORS_ORIGIN`
+- `FAL_KEY`
 - `WORKERS_PUBLIC_URL`
 
 Current local/dev public IDs:
 
 - fingerprint contract: `CCA6GIF5G75DLCTJNAWZQAFRATPE46PNSRQVXB2GZKNHBPKOXDTM3DUB`
 - verifier contract: `CBWXMIRUF3SG2LRB52IQYSH3UYGHY3QJ5KOEMYXEPJ4TN5VSTCAJ7LQI`
-- Composer provider: Smol song workflow
+- Composer provider: `fal-ai/ace-step/prompt-to-audio`
 
 ## Important Caveat: Hidden Phrase
 
@@ -202,7 +203,6 @@ Local `wrangler dev` defaults to `http://localhost:8787`.
 - If the browser shows `402`, inspect worker logs first; the browser can hide the real failure behind CORS or generic payment errors.
 - If Composer breaks after several minutes, check:
   - `composer_sessions`
-  - the wallet's `smol_jwt` and `smol_jwt_expires_at`
-  - the Smol job id in `composer_sessions.smol_job_id`
+  - the fal.ai request id in `composer_sessions.smol_job_id`
   - the matching consultation row by `consultations.smol_job_id`
 - If Hidden Oracle starts failing after a phrase change, verify that the ZK artifacts and verifier contract were regenerated together.

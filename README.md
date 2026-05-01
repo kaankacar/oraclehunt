@@ -7,7 +7,7 @@ This repo currently targets Stellar testnet in local/dev worker config.
 ## Repo Map
 
 - [`apps/web`](./apps/web/README.md): Next.js frontend, Midnight Midway experience, browser wallet flow, gallery, leaderboard, Codex, Hidden Oracle client proof generation.
-- [`apps/workers`](./apps/workers/README.md): Cloudflare Worker API, x402 middleware, public oracle handlers, Composer/Smol orchestration, Hidden Oracle verification flow, faucet.
+- [`apps/workers`](./apps/workers/README.md): Cloudflare Worker API, x402 middleware, public oracle handlers, Composer/fal.ai orchestration, Hidden Oracle verification flow, faucet.
 - [`supabase`](./supabase/README.md): schema and migrations for wallets, consultations, votes, composer sessions, views.
 - [`packages/contracts`](./packages/contracts/README.md): Soroban fingerprint contract.
 - [`packages/hidden-oracle-zk`](./packages/hidden-oracle-zk/README.md): Circom circuit and Groth16 artifact generation.
@@ -124,7 +124,7 @@ These are the current public testnet identifiers used by local/dev worker config
 | USDC contract | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` | SAC used for oracle payments |
 | Fingerprint contract | `CCA6GIF5G75DLCTJNAWZQAFRATPE46PNSRQVXB2GZKNHBPKOXDTM3DUB` | `packages/contracts` deployment |
 | Hidden Oracle verifier contract | `CBWXMIRUF3SG2LRB52IQYSH3UYGHY3QJ5KOEMYXEPJ4TN5VSTCAJ7LQI` | `packages/hidden-oracle-verifier` deployment |
-| Composer provider | Smol song workflow | Composer links the user's passkey wallet to Smol and polls Smol for two playable tracks |
+| Composer provider | `fal-ai/ace-step/prompt-to-audio` | fal.ai queue-backed music generation with lyrics and a hosted audio URL |
 
 ## Important Implementation Notes
 

@@ -3,7 +3,6 @@ import { getTxExplorerUrl } from '../stellar'
 import { applyPaymentSettlementToTrace } from './handler'
 import { ORACLE_PRICE_USDC, getOracleWalletAddress } from '../middleware/payment'
 import type {
-  ComposerAuthRequiredResponse,
   ComposerErrorResponse,
   ComposerPendingResponse,
   Env,
@@ -12,14 +11,17 @@ import type {
   ProcessingTraceStep,
 } from '../types'
 
-const DEFAULT_SMOL_URL = 'https://api.smol.xyz'
-const SMOL_ESTIMATED_COST_USDC = 0.0019
+const FAL_MODEL = 'fal-ai/ace-step/prompt-to-audio'
+const FAL_REQUEST_MODEL = 'fal-ai/ace-step'
+const FAL_QUEUE_SUBMIT_URL = `https://queue.fal.run/${FAL_MODEL}`
+const FAL_QUEUE_REQUEST_BASE = `https://queue.fal.run/${FAL_REQUEST_MODEL}`
+const DEFAULT_DURATION_SECONDS = 60
+const FAL_COST_PER_SECOND_USDC = 0.0002
+const FAL_ESTIMATED_COST_USDC = Number((DEFAULT_DURATION_SECONDS * FAL_COST_PER_SECOND_USDC).toFixed(6))
 
 interface WalletRow {
   id: string
   stellar_address: string
-  smol_jwt: string | null
-  smol_jwt_expires_at: string | null
 }
 
 interface ComposerSessionRow {
@@ -29,10 +31,10 @@ interface ComposerSessionRow {
   tx_hash: string
   prompt: string
   smol_job_id: string | null
-  status: 'awaiting_auth' | 'queued' | 'complete' | 'error'
+  status: 'awaiting_auth' | 'queued' | 'processing' | 'complete' | 'error'
   error_message: string | null
   created_at: string
-  completed_at?: string | null
+  completed_at: string | null
 }
 
 interface ConsultationRow {
@@ -49,58 +51,49 @@ interface ConsultationRow {
   created_at: string
 }
 
-interface SmolLyrics {
-  title?: string
+interface FalSubmitResponse {
+  request_id?: string
+  requestId?: string
+  status_url?: string
+  response_url?: string
+  error?: string
+  detail?: unknown
+}
+
+interface FalStatusResponse {
+  status?: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'ERROR' | string
+  queue_position?: number
+  logs?: Array<{ message?: string }>
+  error?: string
+  detail?: unknown
+}
+
+interface FalAudioFile {
+  url?: string
+  content_type?: string
+  file_name?: string
+}
+
+interface FalAceResult {
+  audio?: FalAudioFile
+  seed?: number
+  tags?: string
   lyrics?: string
-  style?: string[]
-}
-
-interface SmolSong {
-  music_id: string
-  status: number
-  audio?: string
-}
-
-interface SmolJobPayload {
-  kv_do?: {
-    image?: boolean
-    lyrics?: SmolLyrics
-    songs?: SmolSong[]
-  }
-  d1?: {
-    Id?: string
-  }
-  wf?: {
-    status?: string
-  } | string | null
 }
 
 function isConfirmedStellarTxHash(value: string | null | undefined): value is string {
   return Boolean(value && /^[0-9a-f]{64}$/i.test(value))
 }
 
-function getSmolBaseUrl(env: Env): string {
-  return (env.SMOL_API_URL ?? DEFAULT_SMOL_URL).replace(/\/+$/, '')
-}
-
-function getSmolApiBase(env: Env): string {
-  return getSmolBaseUrl(env)
-}
-
-function getSmolImageUrl(env: Env, jobId: string): string {
-  return `${getSmolApiBase(env)}/image/${jobId}.png`
-}
-
-function getSmolSongUrl(env: Env, musicId: string): string {
-  return `${getSmolApiBase(env)}/song/${musicId}.mp3`
-}
-
-function getReadySongUrl(env: Env, song: SmolSong): string {
-  return song.status < 4 && song.audio ? song.audio : getSmolSongUrl(env, song.music_id)
-}
-
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+function requireFalKey(env: Env): string {
+  if (!env.FAL_KEY) {
+    throw new Error('Composer fal.ai API key is not configured.')
+  }
+  return env.FAL_KEY
 }
 
 function buildComposerEconomics(env: Env) {
@@ -108,106 +101,82 @@ function buildComposerEconomics(env: Env) {
 
   return {
     payment_amount_usdc: price,
-    estimated_model_cost_usdc: SMOL_ESTIMATED_COST_USDC,
-    estimated_profit_usdc: Number((price - SMOL_ESTIMATED_COST_USDC).toFixed(6)),
+    estimated_model_cost_usdc: FAL_ESTIMATED_COST_USDC,
+    estimated_profit_usdc: Number((price - FAL_ESTIMATED_COST_USDC).toFixed(6)),
     oracle_wallet_address: getOracleWalletAddress(env, 'composer'),
-    ai_provider: 'Smol',
-    ai_model: 'smol-song-workflow',
+    ai_provider: 'fal.ai',
+    ai_model: FAL_MODEL,
   }
-}
-
-function hasUsableSmolJwt(wallet: WalletRow): boolean {
-  if (!wallet.smol_jwt || !wallet.smol_jwt_expires_at) return false
-  return new Date(wallet.smol_jwt_expires_at).getTime() > Date.now()
-}
-
-function buildComposerAuthRequiredTrace(env: Env, txHash?: string): ProcessingTraceStep[] {
-  const explorerUrl = isConfirmedStellarTxHash(txHash) ? getTxExplorerUrl(env, txHash) : undefined
-
-  return [
-    {
-      id: 'payment-settled',
-      label: 'Payment Settled on Stellar',
-      status: 'success',
-      detail: isConfirmedStellarTxHash(txHash)
-        ? 'The x402 USDC payment was confirmed before the Composer began.'
-        : 'Composer payment was accepted. The worker is carrying an internal payment reference until settlement metadata is available.',
-      txHash: isConfirmedStellarTxHash(txHash) ? txHash : undefined,
-      links: explorerUrl ? [{ label: 'Open payment on Stellar Expert', url: explorerUrl }] : undefined,
-    },
-    {
-      id: 'smol-auth-link',
-      label: 'Linking Identity to Smol',
-      status: 'pending',
-      detail: 'The Composer needs one more passkey assertion to mint a 30-day Smol session for this wallet.',
-    },
-  ]
 }
 
 function buildComposerTrace(
   env: Env,
   session: ComposerSessionRow,
   options?: {
-    coverReady?: boolean
+    queued?: boolean
+    inProgress?: boolean
     lyricsReady?: boolean
-    songs?: SmolSong[]
+    audioReady?: boolean
     saved?: boolean
     errorMessage?: string
+    queuePosition?: number
+    logs?: string[]
   },
 ): ProcessingTraceStep[] {
   const paymentExplorerUrl = isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined
-  const songs = options?.songs ?? []
-  const songsReady = songs.length >= 2 && songs.every((song) => song.status >= 4)
-  const anySongsStarted = songs.some((song) => Boolean(song.audio) || song.status > 0)
+  const falRequestId = session.smol_job_id
+  const lastLog = options?.logs?.filter(Boolean).slice(-1)[0]
 
-  const trace: ProcessingTraceStep[] = [
+  return [
     {
       id: 'payment-settled',
       label: 'Payment Settled on Stellar',
       status: 'success',
-      detail: 'The x402 USDC payment settled before the Smol workflow began.',
+      detail: 'The x402 USDC payment settled before Composer generation was queued.',
       txHash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : undefined,
       links: paymentExplorerUrl ? [{ label: 'Open payment on Stellar Expert', url: paymentExplorerUrl }] : undefined,
     },
     {
-      id: 'smol-auth-linked',
-      label: 'Smol Identity Linked',
-      status: 'success',
-      detail: 'A valid Smol JWT was found for this wallet, so the Composer could use the linked identity immediately.',
+      id: 'composer-job-queued',
+      label: 'Queued Music Generation',
+      status: options?.errorMessage ? 'error' : falRequestId || options?.queued || options?.inProgress || options?.saved ? 'success' : 'pending',
+      detail: options?.errorMessage
+        ? options.errorMessage
+        : falRequestId
+          ? `fal.ai accepted the ${FAL_MODEL} request ${falRequestId}.`
+          : 'Composer is submitting the music request to fal.ai.',
     },
     {
-      id: 'smol-job-queued',
-      label: 'Queued Song Generation on Smol',
-      status: 'success',
-      detail: session.smol_job_id
-        ? `Smol accepted the job and issued workflow ${session.smol_job_id}.`
-        : 'The Composer is waiting for Smol to issue a workflow id.',
-    },
-    {
-      id: 'composer-cover-art',
-      label: 'Generating Cover Art via Pixellab',
-      status: options?.coverReady ? 'success' : 'pending',
-      detail: options?.coverReady
-        ? 'Smol finished the pixel-art cover.'
-        : 'The image pipeline is still rendering the cover art.',
+      id: 'composer-generation',
+      label: 'Generating Song with Lyrics',
+      status: options?.errorMessage ? 'error' : options?.inProgress || options?.lyricsReady || options?.audioReady || options?.saved ? 'success' : 'pending',
+      detail: options?.errorMessage
+        ? options.errorMessage
+        : options?.inProgress
+          ? lastLog ?? 'fal.ai is generating the song.'
+          : typeof options?.queuePosition === 'number'
+            ? `The job is waiting in the fal.ai queue at position ${options.queuePosition}.`
+            : 'The song is waiting for a fal.ai runner.',
     },
     {
       id: 'composer-lyrics',
-      label: 'Lyrics Composed',
-      status: options?.lyricsReady ? 'success' : 'pending',
-      detail: options?.lyricsReady
-        ? 'Smol finalized the title, tags, and lyrics.'
-        : 'The lyric-writing stage is still running.',
+      label: 'Lyrics Prepared',
+      status: options?.errorMessage ? 'error' : options?.lyricsReady || options?.saved ? 'success' : 'pending',
+      detail: options?.errorMessage
+        ? options.errorMessage
+        : options?.lyricsReady || options?.saved
+          ? 'The generated lyrics were returned with the song.'
+          : 'ACE-Step will generate lyrics from the prompt.',
     },
     {
       id: 'composer-audio',
-      label: 'Rendering Audio Variations',
-      status: songsReady ? 'success' : 'pending',
-      detail: songsReady
-        ? 'Both audio variations were rendered and finalized.'
-        : anySongsStarted
-          ? 'Audio rendering has started and the tracks are still baking.'
-          : 'The audio generator has not started streaming yet.',
+      label: 'Audio Ready',
+      status: options?.errorMessage ? 'error' : options?.audioReady || options?.saved ? 'success' : 'pending',
+      detail: options?.errorMessage
+        ? options.errorMessage
+        : options?.audioReady || options?.saved
+          ? 'fal.ai returned a hosted audio file for playback.'
+          : 'The audio file will appear here when generation completes.',
     },
     {
       id: 'composer-saved',
@@ -217,32 +186,59 @@ function buildComposerTrace(
         ? options.errorMessage
         : options?.saved
           ? 'The completed song was written to Supabase and is now visible in Codex and Gallery.'
-          : 'The Composer will save the artifact as soon as both songs are ready.',
+          : 'The Composer will save the artifact as soon as the song is ready.',
     },
   ]
-
-  return trace
 }
 
-function buildComposerArtifactText(lyrics?: SmolLyrics): string {
-  if (!lyrics) return ''
+function buildComposerArtifactText(prompt: string, result: FalAceResult): string {
+  const parts = [`Original song generated for:\n${prompt}`]
 
-  const parts: string[] = []
-  if (lyrics.title) parts.push(`Title: ${lyrics.title}`)
-  if (lyrics.style?.length) parts.push(`Tags: ${lyrics.style.join(', ')}`)
-  if (lyrics.lyrics) {
-    if (parts.length) parts.push('')
-    parts.push(lyrics.lyrics)
+  if (result.tags) {
+    parts.push(`Tags: ${result.tags}`)
   }
 
-  return parts.join('\n')
+  if (result.lyrics) {
+    parts.push(`Lyrics:\n${result.lyrics}`)
+  }
+
+  if (typeof result.seed === 'number') {
+    parts.push(`Seed: ${result.seed}`)
+  }
+
+  return parts.join('\n\n')
+}
+
+async function readResponseJson<T>(response: Response): Promise<T> {
+  const body = await response.text()
+  let json: unknown = {}
+
+  if (body) {
+    try {
+      json = JSON.parse(body)
+    } catch {
+      json = { error: body }
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof (json as { error?: unknown }).error === 'string'
+        ? (json as { error: string }).error
+        : typeof (json as { detail?: unknown }).detail === 'string'
+          ? (json as { detail: string }).detail
+          : body || `HTTP ${response.status}`
+    throw new Error(message)
+  }
+
+  return json as T
 }
 
 async function getWalletForComposer(env: Env, walletAddress: string): Promise<WalletRow> {
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
   const { data, error } = await supabase
     .from('wallets')
-    .select('id, stellar_address, smol_jwt, smol_jwt_expires_at')
+    .select('id, stellar_address')
     .eq('stellar_address', walletAddress)
     .single()
 
@@ -257,7 +253,7 @@ async function getComposerSessionByTxHash(env: Env, txHash: string): Promise<Com
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
   const { data, error } = await supabase
     .from('composer_sessions')
-    .select('id, wallet_id, stellar_address, tx_hash, prompt, smol_job_id, status, error_message, created_at')
+    .select('id, wallet_id, stellar_address, tx_hash, prompt, smol_job_id, status, error_message, created_at, completed_at')
     .eq('tx_hash', txHash)
     .maybeSingle()
 
@@ -265,16 +261,26 @@ async function getComposerSessionByTxHash(env: Env, txHash: string): Promise<Com
   return (data as ComposerSessionRow | null) ?? null
 }
 
-async function getComposerSessionByJobId(env: Env, jobId: string): Promise<ComposerSessionRow | null> {
+async function getComposerSessionByIdOrProviderJobId(env: Env, id: string): Promise<ComposerSessionRow | null> {
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
-  const { data, error } = await supabase
+
+  const { data: byId, error: byIdError } = await supabase
     .from('composer_sessions')
-    .select('id, wallet_id, stellar_address, tx_hash, prompt, smol_job_id, status, error_message, created_at')
-    .eq('smol_job_id', jobId)
+    .select('id, wallet_id, stellar_address, tx_hash, prompt, smol_job_id, status, error_message, created_at, completed_at')
+    .eq('id', id)
     .maybeSingle()
 
-  if (error) throw new Error(`Failed to load composer session: ${error.message}`)
-  return (data as ComposerSessionRow | null) ?? null
+  if (byIdError) throw new Error(`Failed to load composer session: ${byIdError.message}`)
+  if (byId) return byId as ComposerSessionRow
+
+  const { data: byJobId, error: byJobIdError } = await supabase
+    .from('composer_sessions')
+    .select('id, wallet_id, stellar_address, tx_hash, prompt, smol_job_id, status, error_message, created_at, completed_at')
+    .eq('smol_job_id', id)
+    .maybeSingle()
+
+  if (byJobIdError) throw new Error(`Failed to load composer session: ${byJobIdError.message}`)
+  return (byJobId as ComposerSessionRow | null) ?? null
 }
 
 async function createOrLoadComposerSession(
@@ -282,13 +288,13 @@ async function createOrLoadComposerSession(
   wallet: WalletRow,
   prompt: string,
   txHash: string,
-): Promise<ComposerSessionRow> {
+): Promise<{ session: ComposerSessionRow; created: boolean }> {
   const existing = await getComposerSessionByTxHash(env, txHash)
   if (existing) {
     if (existing.stellar_address !== wallet.stellar_address) {
       throw new Error('Composer session belongs to a different wallet.')
     }
-    return existing
+    return { session: existing, created: false }
   }
 
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
@@ -300,7 +306,7 @@ async function createOrLoadComposerSession(
       stellar_address: wallet.stellar_address,
       tx_hash: txHash,
       prompt,
-      status: 'awaiting_auth',
+      status: 'queued',
       payment_amount_usdc: economics.payment_amount_usdc,
       estimated_model_cost_usdc: economics.estimated_model_cost_usdc,
       estimated_profit_usdc: economics.estimated_profit_usdc,
@@ -308,14 +314,14 @@ async function createOrLoadComposerSession(
       ai_provider: economics.ai_provider,
       ai_model: economics.ai_model,
     })
-    .select('id, wallet_id, stellar_address, tx_hash, prompt, smol_job_id, status, error_message, created_at')
+    .select('id, wallet_id, stellar_address, tx_hash, prompt, smol_job_id, status, error_message, created_at, completed_at')
     .single()
 
   if (error || !data) {
     throw new Error(`Failed to create composer session: ${error?.message ?? 'unknown error'}`)
   }
 
-  return data as ComposerSessionRow
+  return { session: data as ComposerSessionRow, created: true }
 }
 
 async function updateComposerSession(
@@ -337,124 +343,121 @@ async function updateComposerSession(
   }
 }
 
-async function findCompletedComposerConsultation(env: Env, jobId: string): Promise<ConsultationRow | null> {
+async function findCompletedComposerConsultation(env: Env, session: ComposerSessionRow): Promise<ConsultationRow | null> {
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
-  const { data, error } = await supabase
+
+  const { data: bySessionId, error: bySessionIdError } = await supabase
     .from('consultations')
     .select('id, wallet_id, prompt, artifact_text, artifact_image, audio_url_1, audio_url_2, smol_job_id, tx_hash, processing_trace, created_at')
-    .eq('smol_job_id', jobId)
+    .eq('composer_session_id', session.id)
     .maybeSingle()
 
-  if (error) throw new Error(`Failed to load composer consultation: ${error.message}`)
-  return (data as ConsultationRow | null) ?? null
+  if (bySessionIdError) {
+    throw new Error(`Failed to load composer consultation: ${bySessionIdError.message}`)
+  }
+  if (bySessionId) return bySessionId as ConsultationRow
+
+  if (!session.smol_job_id) return null
+
+  const { data: byProviderJobId, error: byProviderJobIdError } = await supabase
+    .from('consultations')
+    .select('id, wallet_id, prompt, artifact_text, artifact_image, audio_url_1, audio_url_2, smol_job_id, tx_hash, processing_trace, created_at')
+    .eq('smol_job_id', session.smol_job_id)
+    .maybeSingle()
+
+  if (byProviderJobIdError) {
+    throw new Error(`Failed to load composer consultation: ${byProviderJobIdError.message}`)
+  }
+
+  return (byProviderJobId as ConsultationRow | null) ?? null
 }
 
-async function startSmolJob(env: Env, prompt: string, jwt: string): Promise<string> {
-  const response = await fetch(`${getSmolApiBase(env)}`, {
+function completedResponseFromRow(env: Env, row: ConsultationRow): OracleResponse {
+  return {
+    artifact: row.artifact_text,
+    artifactImage: row.artifact_image ?? undefined,
+    audioUrl1: row.audio_url_1 ?? null,
+    audioUrl2: row.audio_url_2 ?? null,
+    oracleId: 'composer',
+    txHash: isConfirmedStellarTxHash(row.tx_hash) ? row.tx_hash : undefined,
+    explorerUrl: isConfirmedStellarTxHash(row.tx_hash) ? getTxExplorerUrl(env, row.tx_hash) : undefined,
+    processingTrace: row.processing_trace ?? [],
+    timestamp: row.created_at,
+  }
+}
+
+async function submitFalComposerJob(env: Env, prompt: string): Promise<string> {
+  const response = await fetch(FAL_QUEUE_SUBMIT_URL, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${jwt}`,
+      Authorization: `Key ${requireFalKey(env)}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       prompt,
-      public: true,
       instrumental: false,
+      duration: DEFAULT_DURATION_SECONDS,
     }),
   })
 
-  const body = await response.text()
-  if (!response.ok) {
-    throw new Error(body || `Smol job creation failed with HTTP ${response.status}`)
+  const json = await readResponseJson<FalSubmitResponse>(response)
+  const requestId = json.request_id ?? json.requestId
+  if (!requestId) {
+    throw new Error('fal.ai did not return a request id.')
   }
 
-  return body.trim()
+  return requestId
 }
 
-async function fetchSmolJob(env: Env, jobId: string, jwt: string): Promise<SmolJobPayload> {
-  const response = await fetch(`${getSmolApiBase(env)}/${jobId}`, {
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-    },
+async function fetchFalStatus(env: Env, requestId: string): Promise<FalStatusResponse> {
+  const response = await fetch(`${FAL_QUEUE_REQUEST_BASE}/requests/${encodeURIComponent(requestId)}/status?logs=1`, {
+    headers: { Authorization: `Key ${requireFalKey(env)}` },
   })
 
-  const json = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const message = (json as { error?: string; message?: string }).error
-      ?? (json as { error?: string; message?: string }).message
-      ?? `Smol status request failed with HTTP ${response.status}`
-    throw new Error(message)
-  }
-
-  return json as SmolJobPayload
+  return readResponseJson<FalStatusResponse>(response)
 }
 
-function isSmolWorkflowErrored(payload: SmolJobPayload): boolean {
-  if (!payload.wf) return false
-  if (typeof payload.wf === 'string') return payload.wf === 'errored'
-  return payload.wf.status === 'errored'
-}
-
-function isSmolWorkflowComplete(payload: SmolJobPayload): boolean {
-  if (payload.d1?.Id) return true
-  if (!payload.wf) return false
-  if (typeof payload.wf === 'string') return payload.wf === 'complete'
-  return payload.wf.status === 'complete'
+async function fetchFalResult(env: Env, requestId: string): Promise<FalAceResult> {
+  const response = await fetch(`${FAL_QUEUE_REQUEST_BASE}/requests/${encodeURIComponent(requestId)}`, {
+    headers: { Authorization: `Key ${requireFalKey(env)}` },
+  })
+  const json = await readResponseJson<{ response?: FalAceResult; data?: FalAceResult } & FalAceResult>(response)
+  return json.response ?? json.data ?? json
 }
 
 async function finalizeComposerConsultation(
   env: Env,
   session: ComposerSessionRow,
-  payload: SmolJobPayload,
+  result: FalAceResult,
 ): Promise<OracleResponse> {
   if (!session.smol_job_id) {
-    throw new Error('Composer session is missing a Smol job id.')
+    throw new Error('Composer session is missing a fal.ai request id.')
+  }
+  if (!result.audio?.url) {
+    throw new Error('fal.ai completed without returning an audio URL.')
   }
 
-  const existing = await findCompletedComposerConsultation(env, session.smol_job_id)
+  const existing = await findCompletedComposerConsultation(env, session)
   if (existing) {
-    const trace = existing.processing_trace ?? buildComposerTrace(env, session, { saved: true })
-    return {
-      artifact: existing.artifact_text,
-      artifactImage: existing.artifact_image ?? undefined,
-      audioUrl1: existing.audio_url_1 ?? null,
-      audioUrl2: existing.audio_url_2 ?? null,
-      oracleId: 'composer',
-      txHash: isConfirmedStellarTxHash(existing.tx_hash) ? existing.tx_hash : undefined,
-      explorerUrl: isConfirmedStellarTxHash(existing.tx_hash) ? getTxExplorerUrl(env, existing.tx_hash) : undefined,
-      processingTrace: trace,
-      timestamp: existing.created_at,
-    }
-  }
-
-  const lyrics = payload.kv_do?.lyrics
-  const songs = payload.kv_do?.songs ?? []
-  const readySongs = songs.filter((song) => song.status >= 4).slice(0, 2)
-
-  if (!lyrics?.lyrics || readySongs.length < 2) {
-    throw new Error('Composer job completed without enough lyrics or audio to finalize the artifact.')
+    return completedResponseFromRow(env, existing)
   }
 
   const processingTrace = buildComposerTrace(env, session, {
-    coverReady: Boolean(payload.kv_do?.image),
-    lyricsReady: true,
-    songs,
+    lyricsReady: Boolean(result.lyrics),
+    audioReady: true,
     saved: true,
   })
-
-  const artifactImage = getSmolImageUrl(env, session.smol_job_id)
-  const audioUrl1 = getReadySongUrl(env, readySongs[0]!)
-  const audioUrl2 = getReadySongUrl(env, readySongs[1]!)
-  const artifact = buildComposerArtifactText(lyrics)
+  const artifact = buildComposerArtifactText(session.prompt, result)
   const timestamp = nowIso()
+
   const consultationPayload = {
     wallet_id: session.wallet_id,
     oracle_id: 'composer',
     prompt: session.prompt,
     artifact_text: artifact,
-    artifact_image: artifactImage,
-    audio_url_1: audioUrl1,
-    audio_url_2: audioUrl2,
+    artifact_image: null,
+    audio_url_1: result.audio.url,
+    audio_url_2: null,
     composer_session_id: session.id,
     smol_job_id: session.smol_job_id,
     tx_hash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : null,
@@ -463,33 +466,12 @@ async function finalizeComposerConsultation(
   }
 
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
-  const { data: persisted, error: persistedLookupError } = await supabase
+  const { error: insertError } = await supabase
     .from('consultations')
-    .select('id')
-    .eq('smol_job_id', session.smol_job_id)
-    .maybeSingle()
+    .insert(consultationPayload)
 
-  if (persistedLookupError) {
-    throw new Error(`Failed to check existing composer consultation: ${persistedLookupError.message}`)
-  }
-
-  if (persisted?.id) {
-    const { error: updateError } = await supabase
-      .from('consultations')
-      .update(consultationPayload)
-      .eq('id', persisted.id)
-
-    if (updateError) {
-      throw new Error(`Failed to update composer consultation: ${updateError.message}`)
-    }
-  } else {
-    const { error: insertError } = await supabase
-      .from('consultations')
-      .insert(consultationPayload)
-
-    if (insertError) {
-      throw new Error(`Failed to insert composer consultation: ${insertError.message}`)
-    }
+  if (insertError) {
+    throw new Error(`Failed to insert composer consultation: ${insertError.message}`)
   }
 
   await updateComposerSession(env, session.id, {
@@ -500,9 +482,9 @@ async function finalizeComposerConsultation(
 
   return {
     artifact,
-    artifactImage,
-    audioUrl1,
-    audioUrl2,
+    artifactImage: undefined,
+    audioUrl1: result.audio.url,
+    audioUrl2: null,
     oracleId: 'composer',
     txHash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : undefined,
     explorerUrl: isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined,
@@ -515,33 +497,42 @@ export async function handleComposerOracle(
   req: OracleRequest,
   env: Env,
   txHash?: string,
-): Promise<ComposerPendingResponse | ComposerAuthRequiredResponse | ComposerErrorResponse | OracleResponse> {
+): Promise<ComposerPendingResponse | ComposerErrorResponse | OracleResponse> {
   if (!txHash) {
     throw new Error('Composer requires a verified payment reference.')
   }
 
   const wallet = await getWalletForComposer(env, req.walletAddress)
-  const session = await createOrLoadComposerSession(env, wallet, req.prompt, txHash)
+  const { session, created } = await createOrLoadComposerSession(env, wallet, req.prompt, txHash)
 
-  if (!hasUsableSmolJwt(wallet)) {
-    return {
-      status: 'smol-auth-required',
-      oracleId: 'composer',
-      txHash,
-      explorerUrl: isConfirmedStellarTxHash(txHash) ? getTxExplorerUrl(env, txHash) : undefined,
-      processingTrace: buildComposerAuthRequiredTrace(env, txHash),
-      timestamp: nowIso(),
+  if (created || !session.smol_job_id) {
+    try {
+      const requestId = await submitFalComposerJob(env, session.prompt)
+      await updateComposerSession(env, session.id, {
+        smol_job_id: requestId,
+        status: 'queued',
+        error_message: null,
+      })
+
+      return pollComposerStatus(session.id, env)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Composer generation failed.'
+      await updateComposerSession(env, session.id, {
+        status: 'error',
+        error_message: message,
+      })
+      return composerErrorResponse(env, session, message)
     }
   }
 
-  return resumeComposerOracle(req.walletAddress, txHash, env)
+  return pollComposerStatus(session.id, env)
 }
 
 export async function resumeComposerOracle(
   walletAddress: string,
   txHash: string,
   env: Env,
-): Promise<ComposerPendingResponse | ComposerAuthRequiredResponse | ComposerErrorResponse | OracleResponse> {
+): Promise<ComposerPendingResponse | ComposerErrorResponse | OracleResponse> {
   const wallet = await getWalletForComposer(env, walletAddress)
   const session = await getComposerSessionByTxHash(env, txHash)
 
@@ -549,41 +540,17 @@ export async function resumeComposerOracle(
     throw new Error('Composer session not found for this wallet and payment.')
   }
 
-  if (!hasUsableSmolJwt(wallet)) {
-    return {
-      status: 'smol-auth-required',
-      oracleId: 'composer',
-      txHash,
-      explorerUrl: isConfirmedStellarTxHash(txHash) ? getTxExplorerUrl(env, txHash) : undefined,
-      processingTrace: buildComposerAuthRequiredTrace(env, txHash),
-      timestamp: nowIso(),
-    }
-  }
+  return pollComposerStatus(session.id, env)
+}
 
-  if (session.smol_job_id) {
-    return pollComposerStatus(session.smol_job_id, env)
-  }
-
-  const jobId = await startSmolJob(env, session.prompt, wallet.smol_jwt!)
-  await updateComposerSession(env, session.id, {
-    smol_job_id: jobId,
-    status: 'queued',
-    error_message: null,
-  })
-
-  const updatedSession: ComposerSessionRow = {
-    ...session,
-    smol_job_id: jobId,
-    status: 'queued',
-  }
-
+function composerErrorResponse(env: Env, session: ComposerSessionRow, message: string): ComposerErrorResponse {
   return {
-    status: 'pending',
+    status: 'error',
     oracleId: 'composer',
-    jobId,
-    txHash: session.tx_hash,
+    error: message,
+    txHash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : undefined,
     explorerUrl: isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined,
-    processingTrace: buildComposerTrace(env, updatedSession),
+    processingTrace: buildComposerTrace(env, session, { errorMessage: message }),
     timestamp: nowIso(),
   }
 }
@@ -592,7 +559,7 @@ export async function pollComposerStatus(
   jobId: string,
   env: Env,
 ): Promise<ComposerPendingResponse | OracleResponse | ComposerErrorResponse> {
-  const session = await getComposerSessionByJobId(env, jobId)
+  const session = await getComposerSessionByIdOrProviderJobId(env, jobId)
   if (!session) {
     return {
       status: 'error',
@@ -603,105 +570,73 @@ export async function pollComposerStatus(
     }
   }
 
-  const existing = await findCompletedComposerConsultation(env, jobId)
+  const existing = await findCompletedComposerConsultation(env, session)
   if (existing) {
-    const trace = existing.processing_trace ?? buildComposerTrace(env, session, { saved: true })
-    return {
-      artifact: existing.artifact_text,
-      artifactImage: existing.artifact_image ?? undefined,
-      audioUrl1: existing.audio_url_1 ?? null,
-      audioUrl2: existing.audio_url_2 ?? null,
-      oracleId: 'composer',
-      txHash: isConfirmedStellarTxHash(existing.tx_hash) ? existing.tx_hash : undefined,
-      explorerUrl: isConfirmedStellarTxHash(existing.tx_hash) ? getTxExplorerUrl(env, existing.tx_hash) : undefined,
-      processingTrace: trace,
-      timestamp: existing.created_at,
-    }
+    return completedResponseFromRow(env, existing)
   }
 
-  const wallet = await getWalletForComposer(env, session.stellar_address)
-  if (!wallet.smol_jwt) {
-    const processingTrace = buildComposerTrace(env, session, {
-      errorMessage: 'The Composer session lost its Smol credentials before the song finished.',
-    })
-    await updateComposerSession(env, session.id, {
-      status: 'error',
-      error_message: 'Missing Smol JWT while polling composer status.',
-    })
+  if (session.status === 'error') {
+    return composerErrorResponse(env, session, session.error_message ?? 'Composer generation failed.')
+  }
 
+  if (!session.smol_job_id) {
     return {
-      status: 'error',
+      status: 'pending',
       oracleId: 'composer',
-      error: 'The Composer session needs to be linked to Smol again.',
+      jobId: session.id,
       txHash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : undefined,
       explorerUrl: isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined,
-      processingTrace,
+      processingTrace: buildComposerTrace(env, session, { queued: true }),
       timestamp: nowIso(),
     }
   }
 
   try {
-    const payload = await fetchSmolJob(env, jobId, wallet.smol_jwt)
+    const status = await fetchFalStatus(env, session.smol_job_id)
+    const logs = status.logs?.map((log) => log.message ?? '').filter(Boolean)
 
-    if (isSmolWorkflowErrored(payload)) {
-      const processingTrace = buildComposerTrace(env, session, {
-        coverReady: Boolean(payload.kv_do?.image),
-        lyricsReady: Boolean(payload.kv_do?.lyrics?.lyrics),
-        songs: payload.kv_do?.songs ?? [],
-        errorMessage: 'Smol reported that the workflow errored before the song could finish.',
-      })
-      await updateComposerSession(env, session.id, {
-        status: 'error',
-        error_message: 'Smol workflow errored.',
-      })
-
-      return {
-        status: 'error',
-        oracleId: 'composer',
-        error: 'The Composer workflow errored before the song finished.',
-        txHash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : undefined,
-        explorerUrl: isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined,
-        processingTrace,
-        timestamp: nowIso(),
-      }
+    if (status.status === 'COMPLETED') {
+      const result = await fetchFalResult(env, session.smol_job_id)
+      return finalizeComposerConsultation(env, session, result)
     }
 
-    if (isSmolWorkflowComplete(payload)) {
-      return finalizeComposerConsultation(env, session, payload)
+    if (status.status === 'FAILED' || status.status === 'ERROR') {
+      const message = status.error ?? (typeof status.detail === 'string' ? status.detail : 'fal.ai reported that the Composer job failed.')
+      await updateComposerSession(env, session.id, {
+        status: 'error',
+        error_message: message,
+      })
+      return composerErrorResponse(env, session, message)
+    }
+
+    if (status.status === 'IN_PROGRESS' && session.status !== 'processing') {
+      await updateComposerSession(env, session.id, {
+        status: 'processing',
+        error_message: null,
+      })
     }
 
     return {
       status: 'pending',
       oracleId: 'composer',
-      jobId,
+      jobId: session.id,
       txHash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : undefined,
       explorerUrl: isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined,
       processingTrace: buildComposerTrace(env, session, {
-        coverReady: Boolean(payload.kv_do?.image),
-        lyricsReady: Boolean(payload.kv_do?.lyrics?.lyrics),
-        songs: payload.kv_do?.songs ?? [],
+        queued: status.status === 'IN_QUEUE',
+        inProgress: status.status === 'IN_PROGRESS',
+        queuePosition: status.queue_position,
+        logs,
       }),
       timestamp: nowIso(),
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Composer status check failed.'
-    const processingTrace = buildComposerTrace(env, session, {
-      errorMessage: message,
-    })
     await updateComposerSession(env, session.id, {
       status: 'error',
       error_message: message,
     })
-
-    return {
-      status: 'error',
-      oracleId: 'composer',
-      error: message,
-      txHash: isConfirmedStellarTxHash(session.tx_hash) ? session.tx_hash : undefined,
-      explorerUrl: isConfirmedStellarTxHash(session.tx_hash) ? getTxExplorerUrl(env, session.tx_hash) : undefined,
-      processingTrace,
-      timestamp: nowIso(),
-    }
+    return composerErrorResponse(env, session, message)
   }
 }
 
@@ -741,7 +676,7 @@ export async function reconcileComposerSettlement(
       env,
       (consultation.processing_trace as ProcessingTraceStep[] | null) ?? [],
       settledTxHash,
-      'The x402 USDC payment settled before the Smol workflow began.',
+      'The x402 USDC payment settled before Composer generation was queued.',
     )
 
     const { error: updateError } = await supabase

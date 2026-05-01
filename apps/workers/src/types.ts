@@ -13,10 +13,10 @@ export interface Env {
   HIDDEN_ORACLE_VERIFIER_CONTRACT_ID: string
   INFORMANT_PASSPHRASE: string
   STELLAR_NETWORK: string
-  SMOL_API_URL?: string
   ADMIN_CORS_ORIGIN?: string
   STELLA_API_URL?: string
   STELLA_API_KEY?: string
+  FAL_KEY?: string
   WORKERS_PUBLIC_URL?: string
   ORACLE_WALLET_SEER?: string
   ORACLE_WALLET_PAINTER?: string
@@ -48,15 +48,6 @@ export interface ComposerPendingResponse {
   status: 'pending'
   oracleId: 'composer'
   jobId: string
-  txHash?: string
-  explorerUrl?: string
-  processingTrace: ProcessingTraceStep[]
-  timestamp: string
-}
-
-export interface ComposerAuthRequiredResponse {
-  status: 'smol-auth-required'
-  oracleId: 'composer'
   txHash?: string
   explorerUrl?: string
   processingTrace: ProcessingTraceStep[]
