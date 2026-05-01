@@ -76,6 +76,45 @@ const PUBLIC_TRACE_TEMPLATE: ProcessingTraceStep[] = [
   },
 ]
 
+const COMPOSER_TRACE_TEMPLATE: ProcessingTraceStep[] = [
+  {
+    id: 'payment-settled',
+    label: 'Payment Settled on Stellar',
+    status: 'pending',
+    detail: 'The x402 USDC payment will settle before Composer generation is queued.',
+  },
+  {
+    id: 'composer-job-queued',
+    label: 'Queued Music Generation',
+    status: 'pending',
+    detail: 'Composer will submit one lyrics-and-audio request to fal.ai.',
+  },
+  {
+    id: 'composer-generation',
+    label: 'Generating Song with Lyrics',
+    status: 'pending',
+    detail: 'The song will wait for a fal.ai runner, then generate from your prompt.',
+  },
+  {
+    id: 'composer-lyrics',
+    label: 'Lyrics Prepared',
+    status: 'pending',
+    detail: 'ACE-Step will generate lyrics from the prompt.',
+  },
+  {
+    id: 'composer-audio',
+    label: 'Audio Ready',
+    status: 'pending',
+    detail: 'The audio file will appear here when generation completes.',
+  },
+  {
+    id: 'composer-saved',
+    label: 'Saved to Codex',
+    status: 'pending',
+    detail: 'The Composer will save the artifact as soon as the song is ready.',
+  },
+]
+
 const PERSONALITIES: Array<{ id: OraclePersonality; label: string }> = [
   { id: 'default', label: 'Default' },
   { id: 'sassy', label: 'Sassy' },
@@ -122,7 +161,7 @@ export default function OraclePage() {
     setIsLoading(true)
     setError('')
     setResult(null)
-    setLiveTrace(PUBLIC_TRACE_TEMPLATE)
+    setLiveTrace(getTraceTemplate(oracleId))
     setLoadingLabel('Consulting…')
 
     try {
@@ -212,7 +251,7 @@ export default function OraclePage() {
       } as Consultation)
     : null
   const showPersonalityControls = PERSONALITY_ORACLE_IDS.includes(oracleId as typeof PERSONALITY_ORACLE_IDS[number])
-  const visibleTrace = liveTrace.length ? liveTrace : result?.processingTrace ?? PUBLIC_TRACE_TEMPLATE
+  const visibleTrace = liveTrace.length ? liveTrace : result?.processingTrace ?? getTraceTemplate(oracleId)
 
   return (
     <div
@@ -602,6 +641,11 @@ function mergeTrace(
   for (const step of serverTrace) byId.set(step.id, step)
 
   return Array.from(byId.values())
+}
+
+function getTraceTemplate(oracleId: string): ProcessingTraceStep[] {
+  const template = oracleId === 'composer' ? COMPOSER_TRACE_TEMPLATE : PUBLIC_TRACE_TEMPLATE
+  return template.map((step) => ({ ...step }))
 }
 
 function getPlaceholder(oracleId: string): string {
