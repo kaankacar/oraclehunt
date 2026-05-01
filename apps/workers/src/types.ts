@@ -2,7 +2,11 @@ export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 
 export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
 
 export interface WorkersAI {
-  run(model: string, input: Record<string, unknown>): Promise<unknown>
+  run(
+    model: string,
+    input: Record<string, unknown>,
+    options?: { gateway?: { id: string } },
+  ): Promise<unknown>
 }
 
 export interface ComposerAudioObject {
@@ -44,6 +48,7 @@ export interface Env {
   COMPOSER_AUDIO?: ComposerAudioBucket
   COMPOSER_QUEUE?: ComposerQueueBinding
   COMPOSER_MODEL?: string
+  COMPOSER_GATEWAY_ID?: string
   ORACLE_WALLET_SEER?: string
   ORACLE_WALLET_PAINTER?: string
   ORACLE_WALLET_COMPOSER?: string

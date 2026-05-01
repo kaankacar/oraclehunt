@@ -15,6 +15,7 @@ type ComposerSessionStatus = 'queued' | 'processing' | 'complete' | 'error'
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 const COMPOSER_TEXT_MODEL = 'gemini-2.5-flash'
 const DEFAULT_MINIMAX_MODEL = 'minimax/music-2.6'
+const DEFAULT_COMPOSER_GATEWAY_ID = 'default'
 const GEMINI_FLASH_INPUT_PER_MILLION_USDC = 0.30
 const GEMINI_FLASH_OUTPUT_PER_MILLION_USDC = 2.50
 
@@ -484,12 +485,19 @@ async function generateComposerArtifact(env: Env, session: ComposerSessionRow): 
   try {
     const ai = requireComposerAI(env)
     const model = env.COMPOSER_MODEL ?? DEFAULT_MINIMAX_MODEL
-    const generation = await ai.run(model, {
-      prompt: session.prompt,
-      lyrics_optimizer: true,
-      is_instrumental: false,
-      format: 'mp3',
-    })
+    const gatewayId = env.COMPOSER_GATEWAY_ID ?? DEFAULT_COMPOSER_GATEWAY_ID
+    const generation = await ai.run(
+      model,
+      {
+        prompt: session.prompt,
+        lyrics_optimizer: true,
+        is_instrumental: false,
+        format: 'mp3',
+      },
+      {
+        gateway: { id: gatewayId },
+      },
+    )
     const generatedAudioUrl = extractAudioUrl(generation)
     const audioUrl = await storeComposerAudioIfAvailable(env, session.id, generatedAudioUrl)
 

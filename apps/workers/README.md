@@ -129,7 +129,7 @@ Flow:
 2. create or load a queued `composer_sessions` row
 3. enqueue one Composer generation message
 4. return `pending` with the session id
-5. queue consumer calls `env.AI.run('minimax/music-2.6', ...)`
+5. queue consumer calls `env.AI.run('minimax/music-2.6', ..., { gateway: { id: 'default' } })`
 6. use the generated audio URL directly; when R2 is enabled, the existing code path can store the MP3 there
 7. once finished, persist consultation with:
    - `audio_url_1`
@@ -175,6 +175,8 @@ Important ones:
 - `ADMIN_CORS_ORIGIN`
 - `WORKERS_PUBLIC_URL`
 - `COMPOSER_ESTIMATED_COST_USDC`
+- `COMPOSER_GATEWAY_ID` (defaults to `default`)
+- `COMPOSER_AUDIO` R2 binding for durable Composer MP3 storage
 
 Current local/dev public IDs:
 

@@ -6,6 +6,10 @@ compatibility_flags = ["nodejs_compat"]
 [ai]
 binding = "AI"
 
+[[r2_buckets]]
+binding = "COMPOSER_AUDIO"
+bucket_name = "oraclehunt-composer-audio"
+
 [[queues.producers]]
 binding = "COMPOSER_QUEUE"
 queue = "oraclehunt-composer"
@@ -20,6 +24,7 @@ STELLAR_NETWORK = "testnet"
 WORKERS_PUBLIC_URL = "https://oraclehunt-workers.kaankacar02.workers.dev"
 STELLA_API_URL = "https://stella-rag-prod.jutsu.ai/api/threads"
 COMPOSER_MODEL = "minimax/music-2.6"
+COMPOSER_GATEWAY_ID = "default"
 ORACLE_WALLET_SEER = "GDEIKVQUISFSJKBQJWB254MFTAKGHNQJ66OKFZ7LVWJAWYGTY74GEKUM"
 ORACLE_WALLET_PAINTER = "GAJMWI2UBBFHZQYCPRH5XS53OLOA7DWM7LCBATA5B2HSR64MKRPI2JXR"
 ORACLE_WALLET_COMPOSER = "GBZPU7IKRCPTAHV26PTXMR77RTD32O6JTDHMBOJ7FAA2DLMCMVFL4HJN"
