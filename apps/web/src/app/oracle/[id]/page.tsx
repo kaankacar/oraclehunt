@@ -3,14 +3,18 @@
 import { useState, useEffect, type CSSProperties } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ORACLES, type OracleMeta, type Consultation, type ProcessingTraceStep } from '@/types'
+import {
+  ORACLES,
+  PERSONALITY_ORACLE_IDS,
+  type OracleMeta,
+  type Consultation,
+  type OraclePersonality,
+  type ProcessingTraceStep,
+} from '@/types'
 import { useWallet } from '@/components/WalletProvider'
 import {
   consultOracle,
-  ensureSmolAuth,
   pollComposerJob,
-  resumeComposerJob,
-  type ComposerAuthRequiredResult,
   type ComposerErrorResult,
   type ComposerPendingResult,
   type OracleConsultResponse,
@@ -40,6 +44,43 @@ const PUBLIC_TRACE_TEMPLATE: ProcessingTraceStep[] = [
     status: 'pending',
     detail: 'The signed payment is being attached to the request and sent to the oracle worker.',
   },
+  {
+    id: 'client:oracle-processing',
+    label: 'Oracle Processing',
+    status: 'pending',
+    detail: 'The worker is invoking the oracle model and preparing the artifact.',
+  },
+  {
+    id: 'client:supabase-save',
+    label: 'Saving to Codex',
+    status: 'pending',
+    detail: 'The finished artifact will be saved with payment and trace metadata.',
+  },
+  {
+    id: 'payment-settled',
+    label: 'Payment Settled on Stellar',
+    status: 'pending',
+    detail: 'The worker will attach the Stellar settlement hash after x402 confirmation.',
+  },
+  {
+    id: 'oracle-generated',
+    label: 'Oracle Generated Artifact',
+    status: 'pending',
+    detail: 'The oracle model will return the final artifact for this consultation.',
+  },
+  {
+    id: 'artifact-saved',
+    label: 'Saved to Codex',
+    status: 'pending',
+    detail: 'The consultation will appear in your Codex, Gallery, and Leaderboard.',
+  },
+]
+
+const PERSONALITIES: Array<{ id: OraclePersonality; label: string }> = [
+  { id: 'default', label: 'Default' },
+  { id: 'sassy', label: 'Sassy' },
+  { id: 'slam_poet', label: 'Slam Poet' },
+  { id: 'crypto_degen', label: 'Crypto Degen' },
 ]
 
 export default function OraclePage() {
@@ -53,6 +94,7 @@ export default function OraclePage() {
   const [result, setResult] = useState<OracleResult | null>(null)
   const [history, setHistory] = useState<Consultation[]>([])
   const [liveTrace, setLiveTrace] = useState<ProcessingTraceStep[]>([])
+  const [personality, setPersonality] = useState<OraclePersonality>('default')
   const [isLoading, setIsLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('Consulting…')
   const [error, setError] = useState('')
@@ -85,6 +127,7 @@ export default function OraclePage() {
 
     try {
       const data = await consultOracle(oracleId, prompt, address, {
+        personality,
         onProgress: (event) => {
           setLiveTrace((prev) => advancePublicTrace(prev, event))
         },
@@ -93,7 +136,6 @@ export default function OraclePage() {
       if (oracleId === 'composer') {
         const composerResult = await resolveComposerConsultation({
           initialResult: data,
-          walletAddress: address,
           setLiveTrace,
           setLoadingLabel,
         })
@@ -169,6 +211,8 @@ export default function OraclePage() {
         created_at: result.timestamp,
       } as Consultation)
     : null
+  const showPersonalityControls = PERSONALITY_ORACLE_IDS.includes(oracleId as typeof PERSONALITY_ORACLE_IDS[number])
+  const visibleTrace = liveTrace.length ? liveTrace : result?.processingTrace ?? PUBLIC_TRACE_TEMPLATE
 
   return (
     <div
@@ -249,6 +293,43 @@ export default function OraclePage() {
               >
                 {oracle.description}
               </p>
+              {showPersonalityControls && (
+                <div className="mb-4">
+                  <p
+                    className={
+                      themed
+                        ? 'text-xs font-semibold uppercase tracking-[0.16em] text-chrome-dim/80 mb-2'
+                        : 'text-xs font-semibold uppercase tracking-[0.16em] text-navy/45 mb-2'
+                    }
+                  >
+                    Personality
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {PERSONALITIES.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setPersonality(option.id)}
+                        className={
+                          themed
+                            ? `min-h-10 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                                personality === option.id
+                                  ? 'border-[rgba(var(--theme-rgb),0.8)] bg-[rgba(var(--theme-rgb),0.85)] text-midnight shadow-[0_0_16px_rgba(var(--theme-rgb),0.35)]'
+                                  : 'border-[rgba(var(--theme-rgb),0.2)] bg-black/25 text-chrome-bright/75 hover:border-[rgba(var(--theme-rgb),0.45)]'
+                              }`
+                            : `min-h-10 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                                personality === option.id
+                                  ? 'border-accent bg-accent text-white'
+                                  : 'border-accent/15 bg-light-blue/50 text-navy/65 hover:border-accent/35'
+                              }`
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -303,34 +384,12 @@ export default function OraclePage() {
                   to consult the Host.
                 </p>
               )}
-              {oracleId === 'composer' && isLoading && loadingLabel === 'Linking to Smol…' && (
-                <p className="text-navy/55 text-xs mt-3">
-                  The Composer needs one more passkey assertion to link this wallet to Smol. This
-                  should only happen once per active Smol session.
-                </p>
-              )}
-              {oracleId === 'composer' && isLoading && liveTrace.length > 0 && (
-                <div className="mt-6">
-                  <TraceTimeline
-                    steps={liveTrace}
-                    title="Full execution trace"
-                    variant="full"
-                    defaultExpanded={true}
-                  />
-                </div>
-              )}
             </div>
           )}
 
           {result && resultConsultation && (
             <div className="mt-6 space-y-5">
               <ArtifactCard consultation={resultConsultation} />
-              <TraceTimeline
-                steps={liveTrace.length ? liveTrace : result.processingTrace}
-                title="Full execution trace"
-                variant="full"
-                defaultExpanded={true}
-              />
               <div className="text-center space-y-3">
                 <p className={themed ? 'text-xs text-chrome-dim/80 font-body tracking-wider uppercase' : 'text-xs text-navy/50'}>
                   Saved to your Codex
@@ -377,37 +436,62 @@ export default function OraclePage() {
           )}
         </div>
 
-        {oracleId === 'informant' && (
-          <aside className="rounded-2xl border border-[rgba(var(--theme-rgb),0.3)] bg-midnight/55 backdrop-blur-md p-5 shadow-[0_0_40px_rgba(var(--theme-rgb),0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(var(--theme-rgb),0.08)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[rgba(var(--theme-rgb),0.9)] mb-3">
-              Previous Informant Answers
-            </p>
-            {history.length === 0 ? (
-              <p className="text-sm text-chrome-dim/80 font-body">
-                Ask the Informant more than once. Previous riddles will stay here so clue patterns are visible.
+        <aside className="space-y-5 lg:sticky lg:top-20">
+          <TraceTimeline
+            steps={visibleTrace}
+            title="Live execution trace"
+            variant="compact"
+            defaultExpanded={true}
+          />
+
+          {oracleId === 'informant' && (
+            <div
+              className={
+                themed
+                  ? 'rounded-2xl border border-[rgba(var(--theme-rgb),0.3)] bg-midnight/55 backdrop-blur-md p-5 shadow-[0_0_40px_rgba(var(--theme-rgb),0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(var(--theme-rgb),0.08)]'
+                  : 'bg-white rounded-2xl border border-accent/15 p-5 shadow-sm'
+              }
+            >
+              <p
+                className={
+                  themed
+                    ? 'text-xs font-semibold uppercase tracking-[0.2em] text-[rgba(var(--theme-rgb),0.9)] mb-3'
+                    : 'text-xs font-semibold uppercase tracking-[0.2em] text-navy/45 mb-3'
+                }
+              >
+                Previous Informant Answers
               </p>
-            ) : (
-              <div className="space-y-4">
-                {history.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="border-b last:border-b-0 border-[rgba(var(--theme-rgb),0.15)] pb-4 last:pb-0"
-                  >
-                    <p className="text-xs font-mono text-chrome-dim/60 mb-2 tracking-wider">
-                      {new Date(entry.created_at).toLocaleString()}
-                    </p>
-                    <p className="text-xs italic text-chrome-dim/80 whitespace-pre-wrap mb-2 font-body">
-                      &ldquo;{entry.prompt}&rdquo;
-                    </p>
-                    <p className="text-sm text-chrome-bright whitespace-pre-wrap leading-relaxed font-body">
-                      {entry.artifact_text}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </aside>
-        )}
+              {history.length === 0 ? (
+                <p className={themed ? 'text-sm text-chrome-dim/80 font-body' : 'text-sm text-navy/45'}>
+                  Ask the Informant more than once. Previous riddles will stay here so clue patterns are visible.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {history.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className={
+                        themed
+                          ? 'border-b last:border-b-0 border-[rgba(var(--theme-rgb),0.15)] pb-4 last:pb-0'
+                          : 'border-b last:border-b-0 border-accent/10 pb-4 last:pb-0'
+                      }
+                    >
+                      <p className={themed ? 'text-xs font-mono text-chrome-dim/60 mb-2 tracking-wider' : 'text-xs font-mono text-navy/35 mb-2'}>
+                        {new Date(entry.created_at).toLocaleString()}
+                      </p>
+                      <p className={themed ? 'text-xs italic text-chrome-dim/80 whitespace-pre-wrap mb-2 font-body' : 'text-xs italic text-navy/45 whitespace-pre-wrap mb-2'}>
+                        &ldquo;{entry.prompt}&rdquo;
+                      </p>
+                      <p className={themed ? 'text-sm text-chrome-bright whitespace-pre-wrap leading-relaxed font-body' : 'text-sm text-navy whitespace-pre-wrap leading-relaxed'}>
+                        {entry.artifact_text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   )
@@ -419,12 +503,6 @@ function isComposerPendingResult(
   return 'status' in result && result.status === 'pending'
 }
 
-function isComposerAuthRequiredResult(
-  result: OracleConsultResponse,
-): result is ComposerAuthRequiredResult {
-  return 'status' in result && result.status === 'smol-auth-required'
-}
-
 function isComposerErrorResult(
   result: OracleConsultResponse,
 ): result is ComposerErrorResult {
@@ -433,28 +511,14 @@ function isComposerErrorResult(
 
 async function resolveComposerConsultation({
   initialResult,
-  walletAddress,
   setLiveTrace,
   setLoadingLabel,
 }: {
   initialResult: OracleConsultResponse
-  walletAddress: string
   setLiveTrace: (updater: ProcessingTraceStep[] | ((prev: ProcessingTraceStep[]) => ProcessingTraceStep[])) => void
   setLoadingLabel: (label: string) => void
 }): Promise<OracleResult> {
   let current: OracleConsultResponse = initialResult
-
-  while (isComposerAuthRequiredResult(current)) {
-    setLiveTrace(current.processingTrace)
-    setLoadingLabel('Linking to Smol…')
-    await ensureSmolAuth(walletAddress)
-
-    if (!current.txHash) {
-      throw new Error('Composer payment hash missing after Smol auth was requested.')
-    }
-
-    current = await resumeComposerJob(walletAddress, current.txHash)
-  }
 
   if (isComposerErrorResult(current)) {
     setLiveTrace(current.processingTrace)
@@ -463,7 +527,7 @@ async function resolveComposerConsultation({
 
   if (isComposerPendingResult(current)) {
     setLiveTrace(current.processingTrace)
-    setLoadingLabel('Composing… (up to 6 minutes)')
+    setLoadingLabel('Composing…')
 
     while (isComposerPendingResult(current)) {
       await delay(5000)
@@ -522,9 +586,8 @@ function advancePublicTrace(
   }
 
   if (event === 'oracle-response-received') {
-    next.forEach((step) => {
-      if (step.status === 'pending') step.status = 'success'
-    })
+    markSuccess('client:oracle-processing', 'The worker returned the oracle artifact.')
+    markSuccess('client:supabase-save', 'The artifact was saved with the final worker trace.')
   }
 
   return next
@@ -534,7 +597,11 @@ function mergeTrace(
   clientTrace: ProcessingTraceStep[],
   serverTrace: ProcessingTraceStep[],
 ): ProcessingTraceStep[] {
-  return [...clientTrace, ...serverTrace]
+  const byId = new Map<string, ProcessingTraceStep>()
+  for (const step of clientTrace) byId.set(step.id, step)
+  for (const step of serverTrace) byId.set(step.id, step)
+
+  return Array.from(byId.values())
 }
 
 function getPlaceholder(oracleId: string): string {
@@ -543,7 +610,7 @@ function getPlaceholder(oracleId: string): string {
     painter: "Describe a person or scene you'd like rendered in pixel art…",
     composer: "Name a theme for your song (e.g. 'late-night coding sessions')…",
     scribe: "Tell me anything. I will answer only in haiku.",
-    scholar: "Ask about Stellar, SDF, Lumens, or the blockchain…",
+    scholar: "Ask Stella about Stellar, SDF, Soroban, Lumens, or the ecosystem…",
     informant: "Ask me anything. I speak only in riddles.",
   }
   return placeholders[oracleId] ?? 'Your message to the Host…'

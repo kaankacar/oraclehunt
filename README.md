@@ -7,7 +7,7 @@ This repo currently targets Stellar testnet in local/dev worker config.
 ## Repo Map
 
 - [`apps/web`](./apps/web/README.md): Next.js frontend, browser wallet flow, gallery, leaderboard, Codex, Hidden Oracle client proof generation.
-- [`apps/workers`](./apps/workers/README.md): Cloudflare Worker API, x402 middleware, public oracle handlers, Composer/Smol orchestration, Hidden Oracle verification flow, faucet.
+- [`apps/workers`](./apps/workers/README.md): Cloudflare Worker API, x402 middleware, public oracle handlers, Composer/MiniMax orchestration, Hidden Oracle verification flow, faucet.
 - [`supabase`](./supabase/README.md): schema and migrations for wallets, consultations, votes, composer sessions, views.
 - [`packages/contracts`](./packages/contracts/README.md): Soroban fingerprint contract.
 - [`packages/hidden-oracle-zk`](./packages/hidden-oracle-zk/README.md): Circom circuit and Groth16 artifact generation.
@@ -48,14 +48,14 @@ The Next app owns:
 - x402 client-side payment signing
 - page routing and artifact rendering
 - local Hidden Oracle proof generation in the browser
-- server-side helper routes for wallet registration, votes, faucet proxying, Hidden Oracle proxying, and Smol auth proxying
+- server-side helper routes for wallet registration, votes, faucet proxying, and Hidden Oracle proxying
 
 ### 2. Worker backend
 
 The Cloudflare Worker owns:
 
 - x402 payment verification for public oracle endpoints
-- oracle execution against Gemini or Smol
+- oracle execution against Gemini, Stella, or Cloudflare MiniMax
 - persistence into Supabase using the service key
 - Hidden Oracle challenge issuance and proof verification on Soroban
 - testnet faucet funding for new wallets
@@ -89,7 +89,7 @@ Stellar is used for:
 3. Worker responds through x402 middleware with payment requirements.
 4. Browser signs the USDC payment with the passkey wallet.
 5. Worker verifies the payment.
-6. Worker calls Gemini or Smol.
+6. Worker calls Gemini, Stella, or Cloudflare MiniMax depending on the oracle.
 7. Worker writes the consultation to Supabase.
 8. Frontend renders the artifact and execution trace.
 
@@ -105,12 +105,10 @@ Stellar is used for:
 ### Composer flow
 
 1. User pays for the Composer through x402 like any other public oracle.
-2. If the wallet has no active Smol JWT, the worker returns `smol-auth-required`.
-3. Frontend asks for one additional passkey assertion and sends it to `/api/smol/auth`.
-4. Next.js proxies that assertion to Smol and stores the returned JWT in Supabase.
-5. Frontend resumes the Composer job.
-6. Worker starts a Smol generation workflow, returns `pending`, and the page polls status.
-7. On completion, lyrics, cover art, and two audio URLs are persisted to Supabase and rendered like a normal artifact.
+2. Worker creates a queued Composer session and enqueues one MiniMax Music 2.6 generation.
+3. Worker returns `pending`, and the page polls the session id.
+4. The queue consumer saves the generated song URL.
+5. On completion, one audio URL is persisted to Supabase and rendered like a normal artifact.
 
 ## Current Runtime Identifiers
 
@@ -123,7 +121,7 @@ These are the current public testnet identifiers used by local/dev worker config
 | USDC contract | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` | SAC used for oracle payments |
 | Fingerprint contract | `CCA6GIF5G75DLCTJNAWZQAFRATPE46PNSRQVXB2GZKNHBPKOXDTM3DUB` | `packages/contracts` deployment |
 | Hidden Oracle verifier contract | `CBWXMIRUF3SG2LRB52IQYSH3UYGHY3QJ5KOEMYXEPJ4TN5VSTCAJ7LQI` | `packages/hidden-oracle-verifier` deployment |
-| Smol API base | `https://api.smol.xyz` | used for Composer |
+| Composer model | `minimax/music-2.6` | Cloudflare Workers AI |
 
 ## Important Implementation Notes
 

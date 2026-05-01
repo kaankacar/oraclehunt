@@ -144,6 +144,8 @@ export async function handleHiddenOracle(
     throw new Error('HIDDEN_ORACLE_PUBLIC_SIGNALS_INVALID')
   }
 
+  validateHiddenProofInputs(proof, publicSignals)
+
   const [nullifier = '0', nonce, expectedFingerprint, expectedPhraseField] = publicSignals
 
   if (nonce !== challenge.nonce || expectedFingerprint !== challenge.fingerprint_field) {
@@ -269,7 +271,7 @@ async function deriveFingerprint(
     'derive_fingerprint',
     [
       nativeToScVal(walletAddress, { type: 'address' }),
-      xdr.ScVal.scvBytes(Buffer.from(saltHex, 'hex')),
+      fixedBytesScVal(Buffer.from(saltHex, 'hex'), 32, 'fingerprint salt'),
     ],
   )
 
@@ -278,6 +280,10 @@ async function deriveFingerprint(
   }
 
   const returnValue = xdr.ScVal.fromXDR(result.returnValueXdr, 'base64')
+  if (returnValue.switch().name !== 'scvBytes') {
+    throw new Error('Hidden Oracle derive returned non-byte fingerprint')
+  }
+
   const fingerprintBytes = returnValue.bytes()
   if (!fingerprintBytes) {
     throw new Error('Hidden Oracle derive returned non-byte fingerprint')
@@ -305,12 +311,12 @@ async function verifyHiddenProof(
     env.HIDDEN_ORACLE_VERIFIER_CONTRACT_ID,
     'verify',
     [
-      xdr.ScVal.scvBytes(encodeBn254G1([proof.pi_a[0], proof.pi_a[1]])),
-      xdr.ScVal.scvBytes(encodeBn254G2([
+      fixedBytesScVal(encodeBn254G1([proof.pi_a[0], proof.pi_a[1]]), 64, 'proof_a'),
+      fixedBytesScVal(encodeBn254G2([
         [proof.pi_b[0][0], proof.pi_b[0][1]],
         [proof.pi_b[1][0], proof.pi_b[1][1]],
-      ])),
-      xdr.ScVal.scvBytes(encodeBn254G1([proof.pi_c[0], proof.pi_c[1]])),
+      ]), 128, 'proof_b'),
+      fixedBytesScVal(encodeBn254G1([proof.pi_c[0], proof.pi_c[1]]), 64, 'proof_c'),
       xdr.ScVal.scvVec(publicSignals.map(decimalStringToScValU256)),
     ],
   )
@@ -320,6 +326,10 @@ async function verifyHiddenProof(
   }
 
   const returnValue = xdr.ScVal.fromXDR(result.returnValueXdr, 'base64')
+  if (returnValue.switch().name !== 'scvBool') {
+    throw new Error('HIDDEN_ORACLE_ZK_PROOF_REJECTED')
+  }
+
   const isValid = Boolean(returnValue.b())
   if (!isValid) {
     throw new Error('HIDDEN_ORACLE_ZK_PROOF_REJECTED')
@@ -329,6 +339,42 @@ async function verifyHiddenProof(
     proofTxHash: result.txHash,
     proofExplorerUrl: result.explorerUrl,
     verifierContractExplorerUrl: getContractExplorerUrl(env, env.HIDDEN_ORACLE_VERIFIER_CONTRACT_ID),
+  }
+}
+
+function validateHiddenProofInputs(proof: Groth16ProofJson, publicSignals: string[]) {
+  if (
+    !Array.isArray(proof.pi_a)
+    || proof.pi_a.length < 2
+    || !Array.isArray(proof.pi_b)
+    || proof.pi_b.length < 2
+    || !Array.isArray(proof.pi_b[0])
+    || !Array.isArray(proof.pi_b[1])
+    || proof.pi_b[0].length < 2
+    || proof.pi_b[1].length < 2
+    || !Array.isArray(proof.pi_c)
+    || proof.pi_c.length < 2
+  ) {
+    throw new Error('HIDDEN_ORACLE_PROOF_INVALID')
+  }
+
+  const proofValues = [
+    proof.pi_a[0],
+    proof.pi_a[1],
+    proof.pi_b[0][0],
+    proof.pi_b[0][1],
+    proof.pi_b[1][0],
+    proof.pi_b[1][1],
+    proof.pi_c[0],
+    proof.pi_c[1],
+  ]
+
+  for (const value of proofValues) {
+    assertDecimalFieldString(value, 'HIDDEN_ORACLE_PROOF_INVALID')
+  }
+
+  for (const signal of publicSignals) {
+    assertDecimalFieldString(signal, 'HIDDEN_ORACLE_PUBLIC_SIGNALS_INVALID')
   }
 }
 
@@ -346,12 +392,33 @@ function encodeBn254G2(point: [[string, string], [string, string]]): Buffer {
 }
 
 function decimalStringToScValU256(value: string): xdr.ScVal {
+  assertDecimalFieldString(value, 'HIDDEN_ORACLE_PUBLIC_SIGNALS_INVALID')
   return nativeToScVal(BigInt(value), { type: 'u256' })
 }
 
 function decimalStringToBuffer32(value: string): Buffer {
+  assertDecimalFieldString(value, 'HIDDEN_ORACLE_PROOF_INVALID')
   const hex = BigInt(value).toString(16).padStart(64, '0')
   return Buffer.from(hex, 'hex')
+}
+
+function fixedBytesScVal(bytes: Buffer, expectedLength: number, label: string): xdr.ScVal {
+  if (bytes.length !== expectedLength) {
+    throw new Error(`Hidden Oracle ${label} must be ${expectedLength} bytes`)
+  }
+
+  return xdr.ScVal.scvBytes(bytes)
+}
+
+function assertDecimalFieldString(value: unknown, errorCode: string): asserts value is string {
+  if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error(errorCode)
+  }
+
+  const numeric = BigInt(value)
+  if (numeric < 0n || numeric >= BN254_FIELD_MODULUS) {
+    throw new Error(errorCode)
+  }
 }
 
 function randomFieldDecimal(): string {

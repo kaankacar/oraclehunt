@@ -109,8 +109,8 @@ importers:
   apps/workers:
     dependencies:
       '@stellar/stellar-sdk':
-        specifier: ^12.3.0
-        version: 12.3.0
+        specifier: 14.6.1
+        version: 14.6.1
       '@supabase/supabase-js':
         specifier: ^2.43.0
         version: 2.103.0

@@ -1,4 +1,5 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant' | 'hidden'
+export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
 
 export interface OracleMeta {
   id: OracleId
@@ -83,17 +84,17 @@ export const ORACLES: OracleMeta[] = [
   },
   {
     id: 'scholar',
-    name: 'The Scholar',
-    specialty: 'Stellar trivia & lore',
-    emoji: '📚',
+    name: 'Stella',
+    specialty: 'Stellar answers from Stella',
+    emoji: '✨',
     fee: '$0.10',
-    description: 'An archival keeper of Stellar lore that responds to questions with facts and explanations.',
-    title: 'Host of Knowledge',
-    longDescription: 'A relic librarian and lore-keeper of cosmic truths. Scroll vaults glow with blue-gold archival light as the celestial filing system retrieves wisdom from across the stellar expanse.',
+    description: 'Ask about Stellar, SDF, Soroban, Lumens, or ecosystem lore. Stella answers directly from its Stellar knowledge base.',
+    title: 'Host of Stellar Knowledge',
+    longDescription: 'A Stellar-native knowledge host that answers directly from Stella. Ask about SDF, Soroban, Lumens, ecosystem history, or protocol details.',
     color: '#4a9eff',
     glowClass: 'glow-scholar',
     textGlowClass: 'text-glow-scholar',
-    icon: '📚',
+    icon: '✨',
     image: '/images/the_scholar.png',
   },
   {
@@ -133,6 +134,8 @@ export const HIDDEN_ORACLE: OracleMeta = {
 export const ALL_ORACLES: OracleMeta[] = [...ORACLES, HIDDEN_ORACLE]
 
 export const PROGRESS_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar'] as const
+export const PUBLIC_ORACLE_IDS = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant'] as const
+export const PERSONALITY_ORACLE_IDS = ['seer', 'scribe', 'informant'] as const
 
 export function isProgressOracleId(oracleId: OracleId | string): oracleId is typeof PROGRESS_ORACLE_IDS[number] {
   return PROGRESS_ORACLE_IDS.includes(oracleId as typeof PROGRESS_ORACLE_IDS[number])
@@ -154,6 +157,15 @@ export interface Consultation {
   zk_contract_id?: string | null
   zk_tx_hash?: string | null
   zk_verify_tx_hash?: string | null
+  payment_amount_usdc?: number | null
+  estimated_model_cost_usdc?: number | null
+  estimated_profit_usdc?: number | null
+  oracle_wallet_address?: string | null
+  ai_provider?: string | null
+  ai_model?: string | null
+  input_tokens?: number | null
+  output_tokens?: number | null
+  total_tokens?: number | null
   created_at: string
 }
 

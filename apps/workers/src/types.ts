@@ -1,4 +1,27 @@
 export type OracleId = 'seer' | 'painter' | 'composer' | 'scribe' | 'scholar' | 'informant'
+export type OraclePersonality = 'default' | 'sassy' | 'slam_poet' | 'crypto_degen'
+
+export interface WorkersAI {
+  run(model: string, input: Record<string, unknown>): Promise<unknown>
+}
+
+export interface ComposerAudioObject {
+  body: ReadableStream
+  httpMetadata?: { contentType?: string }
+}
+
+export interface ComposerAudioBucket {
+  put(
+    key: string,
+    value: ArrayBuffer,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>
+  get(key: string): Promise<ComposerAudioObject | null>
+}
+
+export interface ComposerQueueBinding {
+  send(message: unknown): Promise<void>
+}
 
 export interface Env {
   GEMINI_API_KEY: string
@@ -14,11 +37,26 @@ export interface Env {
   STELLAR_NETWORK: string
   SMOL_API_URL?: string
   ADMIN_CORS_ORIGIN?: string
+  STELLA_API_URL?: string
+  STELLA_API_KEY?: string
+  WORKERS_PUBLIC_URL?: string
+  AI?: WorkersAI
+  COMPOSER_AUDIO?: ComposerAudioBucket
+  COMPOSER_QUEUE?: ComposerQueueBinding
+  COMPOSER_MODEL?: string
+  ORACLE_WALLET_SEER?: string
+  ORACLE_WALLET_PAINTER?: string
+  ORACLE_WALLET_COMPOSER?: string
+  ORACLE_WALLET_SCRIBE?: string
+  ORACLE_WALLET_SCHOLAR?: string
+  ORACLE_WALLET_INFORMANT?: string
+  COMPOSER_ESTIMATED_COST_USDC?: string
 }
 
 export interface OracleRequest {
   prompt: string
   walletAddress: string
+  personality?: OraclePersonality
 }
 
 export interface OracleResponse {
@@ -37,15 +75,6 @@ export interface ComposerPendingResponse {
   status: 'pending'
   oracleId: 'composer'
   jobId: string
-  txHash?: string
-  explorerUrl?: string
-  processingTrace: ProcessingTraceStep[]
-  timestamp: string
-}
-
-export interface ComposerAuthRequiredResponse {
-  status: 'smol-auth-required'
-  oracleId: 'composer'
   txHash?: string
   explorerUrl?: string
   processingTrace: ProcessingTraceStep[]

@@ -6,7 +6,7 @@ import { useWallet } from '@/components/WalletProvider'
 import { ArtifactCard } from '@/components/ArtifactCard'
 import { getGallery, getGalleryArtifacts, castVote, createSupabaseClient } from '@/lib/supabase'
 import { truncateAddress } from '@/lib/wallet'
-import type { Consultation } from '@/types'
+import { ORACLES, type Consultation, type OracleId } from '@/types'
 
 interface GalleryEntry {
   wallet_id: string
@@ -28,6 +28,7 @@ export default function GalleryPage() {
   const [view, setView] = useState<'artifacts' | 'codexes'>('artifacts')
   const [entries, setEntries] = useState<GalleryEntry[]>([])
   const [artifacts, setArtifacts] = useState<GalleryArtifact[]>([])
+  const [oracleFilter, setOracleFilter] = useState<OracleId | 'all'>('all')
   const [votedFor, setVotedFor] = useState<Set<string>>(new Set())
   const [voteMessages, setVoteMessages] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
@@ -52,22 +53,22 @@ export default function GalleryPage() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  async function handleVote(targetAddress: string) {
+  async function handleVote(targetConsultationId: string) {
     if (!address) return
 
-    const result = await castVote(address, targetAddress)
+    const result = await castVote(address, targetConsultationId)
     if (result.success) {
-      setVotedFor((prev) => new Set([...prev, targetAddress]))
-      setVoteMessages((prev) => ({ ...prev, [targetAddress]: '✓ Voted!' }))
+      setVotedFor((prev) => new Set([...prev, targetConsultationId]))
+      setVoteMessages((prev) => ({ ...prev, [targetConsultationId]: 'Voted' }))
       loadGallery()
     } else {
-      setVoteMessages((prev) => ({ ...prev, [targetAddress]: result.error ?? 'Vote failed' }))
+      setVoteMessages((prev) => ({ ...prev, [targetConsultationId]: result.error ?? 'Vote failed' }))
     }
 
     setTimeout(() => {
       setVoteMessages((prev) => {
         const next = { ...prev }
-        delete next[targetAddress]
+        delete next[targetConsultationId]
         return next
       })
     }, 3000)
@@ -81,6 +82,10 @@ export default function GalleryPage() {
     )
   }
 
+  const filteredArtifacts = oracleFilter === 'all'
+    ? artifacts
+    : artifacts.filter((artifact) => artifact.oracle_id === oracleFilter)
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-12">
       <div className="text-center mb-10">
@@ -89,7 +94,7 @@ export default function GalleryPage() {
           Explore every oracle output, or switch to the per-seeker Codex view.
         </p>
         <p className="text-navy/45 text-xs mt-2">
-          Votes are cast here in the Gallery, and each vote applies to the seeker&apos;s whole Codex.
+          Votes apply to individual artifacts. Seeker totals sum all artifact votes.
         </p>
       </div>
 
@@ -117,17 +122,39 @@ export default function GalleryPage() {
       </div>
 
       {view === 'artifacts' ? (
-        artifacts.length === 0 ? (
+        <>
+          <div className="mb-6 flex flex-wrap justify-center gap-2">
+            {[
+              { id: 'all' as const, label: 'All' },
+              ...ORACLES.map((oracle) => ({ id: oracle.id, label: oracle.name.replace('The ', '') })),
+              { id: 'hidden' as const, label: 'Hidden' },
+            ].map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setOracleFilter(filter.id)}
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  oracleFilter === filter.id
+                    ? 'border-accent bg-accent text-white'
+                    : 'border-accent/15 bg-white text-navy/60 hover:border-accent/35'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
+        {filteredArtifacts.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-navy/40">No artifacts yet. Be the first seeker.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {artifacts.map((artifact) => {
+            {filteredArtifacts.map((artifact) => {
               const targetAddress = artifact.stellar_address
               const isMe = targetAddress === address
-              const hasVoted = votedFor.has(targetAddress)
-              const voteMsg = voteMessages[targetAddress]
+              const hasVoted = votedFor.has(artifact.id)
+              const voteMsg = voteMessages[artifact.id]
               const ownerLabel = artifact.display_name ?? truncateAddress(targetAddress)
 
               return (
@@ -148,7 +175,7 @@ export default function GalleryPage() {
                       {voteMsg && <span className="text-xs text-navy/50">{voteMsg}</span>}
                       {!isMe && address ? (
                         <button
-                          onClick={() => handleVote(targetAddress)}
+                          onClick={() => handleVote(artifact.id)}
                           disabled={hasVoted}
                           className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
                             hasVoted
@@ -156,7 +183,7 @@ export default function GalleryPage() {
                               : 'bg-light-blue text-accent hover:bg-accent hover:text-white'
                           }`}
                         >
-                          {hasVoted ? `★ ${artifact.vote_count}` : `Vote for this seeker's Codex · ☆ ${artifact.vote_count}`}
+                          {hasVoted ? `★ ${artifact.vote_count}` : `Vote for this artifact · ☆ ${artifact.vote_count}`}
                         </button>
                       ) : (
                         <span className="text-xs text-navy/30">★ {artifact.vote_count}</span>
@@ -168,6 +195,8 @@ export default function GalleryPage() {
             })}
           </div>
         )
+      }
+        </>
       ) : (
         entries.length === 0 ? (
           <div className="text-center py-20">
@@ -177,8 +206,6 @@ export default function GalleryPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {entries.map((entry) => {
               const isMe = entry.stellar_address === address
-              const hasVoted = votedFor.has(entry.stellar_address)
-              const voteMsg = voteMessages[entry.stellar_address]
               const displayName = entry.display_name ?? truncateAddress(entry.stellar_address)
 
               return (
@@ -206,7 +233,7 @@ export default function GalleryPage() {
                   </div>
 
                   <p className="text-[11px] text-navy/40 mb-4">
-                    Votes are cast in the Gallery and apply to the whole Codex.
+                    Vote totals sum this seeker&apos;s artifact votes.
                   </p>
 
                   <div className="flex items-center justify-between">
@@ -218,25 +245,7 @@ export default function GalleryPage() {
                     </Link>
 
                     <div className="flex items-center gap-2">
-                      {voteMsg && (
-                        <span className="text-xs text-navy/50">{voteMsg}</span>
-                      )}
-                      {!isMe && address && (
-                        <button
-                          onClick={() => handleVote(entry.stellar_address)}
-                          disabled={hasVoted}
-                          className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
-                            hasVoted
-                              ? 'bg-accent/10 text-accent/50 cursor-default'
-                              : 'bg-light-blue text-accent hover:bg-accent hover:text-white'
-                          }`}
-                        >
-                          {hasVoted ? `★ ${entry.vote_count}` : `☆ ${entry.vote_count}`}
-                        </button>
-                      )}
-                      {(isMe || !address) && (
-                        <span className="text-xs text-navy/30">★ {entry.vote_count}</span>
-                      )}
+                      <span className="text-xs text-navy/30">★ {entry.vote_count}</span>
                     </div>
                   </div>
                 </div>

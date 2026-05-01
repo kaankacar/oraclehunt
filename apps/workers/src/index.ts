@@ -9,7 +9,14 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { paymentMiddleware } from '@x402/hono'
 import { buildPaymentRoutes, buildResourceServer } from './middleware/payment'
-import { handleComposerOracle, pollComposerStatus, reconcileComposerSettlement, resumeComposerOracle } from './oracles/composer'
+import {
+  getComposerAudio,
+  handleComposerOracle,
+  pollComposerStatus,
+  processComposerQueue,
+  reconcileComposerSettlement,
+  resumeComposerOracle,
+} from './oracles/composer'
 import { attachOracleSettlement, applyPaymentSettlementToTrace, handleOracle } from './oracles/handler'
 import { createHiddenOracleChallenge, handleHiddenOracle } from './oracles/hidden'
 import { fundTestnetWallet } from './faucet'
@@ -17,6 +24,7 @@ import { getTxExplorerUrl } from './stellar'
 import type { Env, OracleId, OracleRequest } from './types'
 
 const VALID_ORACLE_IDS: OracleId[] = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant']
+const VALID_PERSONALITIES = new Set(['default', 'sassy', 'slam_poet', 'crypto_degen'])
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -121,7 +129,7 @@ app.use('/oracle/:id', async (c, next) => {
         c.env,
         payload.processingTrace as never,
         settledTxHash,
-        'The x402 USDC payment settled before the Smol workflow began.',
+        'The x402 USDC payment settled before Composer generation was queued.',
       )
     }
   } else {
@@ -276,6 +284,15 @@ app.get('/oracle/composer/status/:jobId', async (c) => {
   }
 })
 
+app.get('/composer/audio/:key', async (c) => {
+  const key = c.req.param('key')
+  if (!key?.trim()) {
+    return c.text('Not found', 404)
+  }
+
+  return getComposerAudio(c.env, decodeURIComponent(key))
+})
+
 // Oracle consultation endpoint
 app.post('/oracle/:id', async (c) => {
   const oracleId = c.req.param('id') as OracleId
@@ -296,6 +313,10 @@ app.post('/oracle/:id', async (c) => {
 
   if (body.prompt.length > 1000) {
     return c.json({ error: 'Prompt too long (max 1000 characters)' }, 400)
+  }
+
+  if (body.personality && !VALID_PERSONALITIES.has(body.personality)) {
+    return c.json({ error: 'Invalid personality' }, 400)
   }
 
   const composerPaymentRef = createComposerPaymentReference(
@@ -350,4 +371,7 @@ app.post('/faucet', async (c) => {
   }
 })
 
-export default app
+export default {
+  fetch: app.fetch,
+  queue: processComposerQueue,
+}

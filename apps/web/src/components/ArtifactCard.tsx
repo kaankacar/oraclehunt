@@ -8,7 +8,7 @@ const ORACLE_EMOJI: Record<string, string> = {
   painter: '🎨',
   composer: '🎵',
   scribe: '📜',
-  scholar: '📚',
+  scholar: '✨',
   informant: '🕵️',
   hidden: '🗝️',
 }
@@ -18,7 +18,7 @@ const ORACLE_NAME: Record<string, string> = {
   painter: 'The Painter',
   composer: 'The Composer',
   scribe: 'The Scribe',
-  scholar: 'The Scholar',
+  scholar: 'Stella',
   informant: 'The Informant',
   hidden: 'The Hidden Oracle',
 }
@@ -143,7 +143,7 @@ export function ArtifactCard({
               {consultation.audio_url_1 && (
                 <div className="rounded-xl border border-accent/10 bg-light-blue/40 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-accent mb-2">
-                    Variation 1
+                    Generated Song
                   </p>
                   <audio controls preload="none" className="w-full" src={consultation.audio_url_1} />
                 </div>

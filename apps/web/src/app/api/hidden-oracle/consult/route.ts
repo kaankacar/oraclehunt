@@ -45,6 +45,13 @@ export async function POST(request: NextRequest) {
     }
 
     const message = error instanceof Error ? error.message : 'The Oracle is silent.'
+    if (message === 'HIDDEN_ORACLE_ZK_PROOF_REJECTED' || message.includes('Bad union switch')) {
+      return NextResponse.json(
+        { error: 'Hidden Oracle proof verification failed. Please regenerate the proof and try again.' },
+        { status: 400 },
+      )
+    }
+
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

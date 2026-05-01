@@ -1,12 +1,24 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import type { Route } from 'next'
 import { useWallet } from './WalletProvider'
+
+const HOW_IT_WORKS_ROUTE = '/how-it-works' as Route
 
 export function Nav() {
   const pathname = usePathname()
   const { address, displayAddress, balance, username, isConnected, logout } = useWallet()
+  const [copied, setCopied] = useState(false)
+
+  async function copyAddress() {
+    if (!address) return
+    await navigator.clipboard.writeText(address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1400)
+  }
 
   if (pathname === '/' || pathname === '/midway') return null
 
@@ -27,6 +39,9 @@ export function Nav() {
           <Link href="/leaderboard" className="text-white/80 hover:text-white text-sm transition-colors">
             Leaderboard
           </Link>
+          <Link href={HOW_IT_WORKS_ROUTE} className="text-white/80 hover:text-white text-sm transition-colors">
+            How It Works
+          </Link>
           {isConnected && address && (
             <Link href={`/codex/${address}`} className="text-white/80 hover:text-white text-sm transition-colors">
               My Codex
@@ -40,9 +55,19 @@ export function Nav() {
                   @{username}
                 </span>
               )}
-              <span className="text-xs font-mono text-accent-light">
-                {displayAddress}
-              </span>
+              {address && (
+                <button
+                  type="button"
+                  onClick={copyAddress}
+                  className="group relative text-xs font-mono text-accent-light hover:text-white transition-colors"
+                  aria-label="Copy wallet address"
+                >
+                  {displayAddress}
+                  <span className="pointer-events-none absolute right-0 top-full mt-2 whitespace-nowrap rounded bg-navy/95 px-2 py-1 text-[10px] font-sans text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                    {copied ? 'Copied' : 'Copy address'}
+                  </span>
+                </button>
+              )}
               {balance !== null && (
                 <span className="bg-accent/20 text-accent-light text-xs font-mono px-2 py-1 rounded">
                   ${balance} USDC

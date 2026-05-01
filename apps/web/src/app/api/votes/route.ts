@@ -5,7 +5,7 @@ export const runtime = 'nodejs'
 
 interface VoteBody {
   voterAddress?: string
-  targetAddress?: string
+  targetConsultationId?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -17,11 +17,11 @@ export async function POST(request: NextRequest) {
   }
 
   const voterAddress = body.voterAddress?.trim()
-  const targetAddress = body.targetAddress?.trim()
+  const targetConsultationId = body.targetConsultationId?.trim()
 
-  if (!voterAddress || !targetAddress) {
+  if (!voterAddress || !targetConsultationId) {
     return NextResponse.json(
-      { error: 'voterAddress and targetAddress are required' },
+      { error: 'voterAddress and targetConsultationId are required' },
       { status: 400 },
     )
   }
@@ -31,29 +31,34 @@ export async function POST(request: NextRequest) {
 
     const [{ data: voter }, { data: target }] = await Promise.all([
       supabase.from('wallets').select('id').eq('stellar_address', voterAddress).maybeSingle(),
-      supabase.from('wallets').select('id').eq('stellar_address', targetAddress).maybeSingle(),
+      supabase
+        .from('consultations')
+        .select('id, wallet_id')
+        .eq('id', targetConsultationId)
+        .maybeSingle(),
     ])
 
     if (!voter || !target) {
-      return NextResponse.json({ error: 'Wallet not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Wallet or artifact not found' }, { status: 404 })
     }
 
-    if (voter.id === target.id) {
+    if (voter.id === target.wallet_id) {
       return NextResponse.json(
-        { error: 'You cannot vote for your own Codex.' },
+        { error: 'You cannot vote for your own artifact.' },
         { status: 400 },
       )
     }
 
     const { error } = await supabase.from('votes').insert({
       voter_wallet_id: voter.id,
-      target_wallet_id: target.id,
+      target_wallet_id: target.wallet_id,
+      target_consultation_id: target.id,
     })
 
     if (error) {
       if (error.code === '23505') {
         return NextResponse.json(
-          { error: 'You have already voted for this Codex.' },
+          { error: 'You have already voted for this artifact.' },
           { status: 409 },
         )
       }

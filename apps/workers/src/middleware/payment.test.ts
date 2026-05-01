@@ -92,6 +92,12 @@ const mockEnv = {
   HIDDEN_ORACLE_VERIFIER_CONTRACT_ID: 'PLACEHOLDER',
   INFORMANT_PASSPHRASE: 'LIQUIDITY',
   STELLAR_NETWORK: 'pubnet',
+  ORACLE_WALLET_SEER: 'GSEER',
+  ORACLE_WALLET_PAINTER: 'GPAINTER',
+  ORACLE_WALLET_COMPOSER: 'GCOMPOSER',
+  ORACLE_WALLET_SCRIBE: 'GSCRIBE',
+  ORACLE_WALLET_SCHOLAR: 'GSCHOLAR',
+  ORACLE_WALLET_INFORMANT: 'GINFORMANT',
 }
 
 function buildApp() {
@@ -116,6 +122,18 @@ describe('x402 payment middleware', () => {
     const res = await app.fetch(req, mockEnv)
     expect(res.status).toBe(402)
     expect(res.headers.get('PAYMENT-REQUIRED')).not.toBeNull()
+  })
+
+  it('builds payment routes with each oracle wallet as payTo', async () => {
+    const { buildPaymentRoutes } = await import('./payment')
+    const routes = buildPaymentRoutes(mockEnv)
+
+    expect((routes as any)['POST /oracle/seer'].accepts.payTo).toBe('GSEER')
+    expect((routes as any)['POST /oracle/painter'].accepts.payTo).toBe('GPAINTER')
+    expect((routes as any)['POST /oracle/composer'].accepts.payTo).toBe('GCOMPOSER')
+    expect((routes as any)['POST /oracle/scribe'].accepts.payTo).toBe('GSCRIBE')
+    expect((routes as any)['POST /oracle/scholar'].accepts.payTo).toBe('GSCHOLAR')
+    expect((routes as any)['POST /oracle/informant'].accepts.payTo).toBe('GINFORMANT')
   })
 
   it('returns 200 with artifact on valid payment', async () => {

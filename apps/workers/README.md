@@ -5,8 +5,8 @@ This app is the Cloudflare Worker backend for Oracle Hunt.
 It owns:
 
 - x402 payment gating for public oracles
-- Gemini-backed public oracle execution
-- Composer orchestration with Smol
+- Gemini/Stella-backed public oracle execution
+- Composer orchestration with Cloudflare MiniMax and Queues
 - Hidden Oracle challenge issuance and proof verification
 - Supabase writes using the service key
 - local/testnet faucet support
@@ -21,7 +21,7 @@ This file wires:
 - global error handling
 - x402 middleware
 - oracle routes
-- composer resume/status routes
+- composer status/audio routes
 - Hidden Oracle routes
 - health and faucet routes
 
@@ -44,13 +44,13 @@ Behavior:
 - public oracles require `prompt` and `walletAddress`
 - `composer` is special-cased and may return `202`
 
-### `POST /oracle/composer/resume`
-
-Resumes Composer after the extra Smol-auth step.
-
 ### `GET /oracle/composer/status/:jobId`
 
-Free polling endpoint for Composer job status.
+Free polling endpoint for Composer session status.
+
+### `GET /composer/audio/:key`
+
+Serves stored Composer MP3 files from R2.
 
 ### `POST /oracle/hidden/challenge`
 
@@ -121,22 +121,19 @@ Owned in:
 
 - `src/oracles/composer.ts`
 
-Composer diverges from the shared path because it is async and uses Smol.
+Composer diverges from the shared path because it is async and uses MiniMax through Cloudflare Workers AI.
 
 Flow:
 
 1. verify x402 payment
-2. load wallet and Smol JWT
-3. if no valid JWT, return `smol-auth-required`
-4. after auth, start a Smol job
-5. create or update a `composer_sessions` row
-6. return `pending`
-7. status polling translates Smol state into Oracle Hunt trace steps
-8. once finished, persist consultation with:
-   - lyrics
-   - cover art URL
+2. create or load a queued `composer_sessions` row
+3. enqueue one Composer generation message
+4. return `pending` with the session id
+5. queue consumer calls `env.AI.run('minimax/music-2.6', ...)`
+6. use the generated audio URL directly; when R2 is enabled, the existing code path can store the MP3 there
+7. once finished, persist consultation with:
    - `audio_url_1`
-   - `audio_url_2`
+   - `audio_url_2 = null`
 
 ### Hidden Oracle
 
@@ -175,14 +172,15 @@ Important ones:
 - `ZK_CONTRACT_ID`
 - `HIDDEN_ORACLE_VERIFIER_CONTRACT_ID`
 - `INFORMANT_PASSPHRASE`
-- `SMOL_API_URL`
 - `ADMIN_CORS_ORIGIN`
+- `WORKERS_PUBLIC_URL`
+- `COMPOSER_ESTIMATED_COST_USDC`
 
 Current local/dev public IDs:
 
 - fingerprint contract: `CCA6GIF5G75DLCTJNAWZQAFRATPE46PNSRQVXB2GZKNHBPKOXDTM3DUB`
 - verifier contract: `CBWXMIRUF3SG2LRB52IQYSH3UYGHY3QJ5KOEMYXEPJ4TN5VSTCAJ7LQI`
-- Smol API: `https://api.smol.xyz`
+- Composer model: `minimax/music-2.6`
 
 ## Important Caveat: Hidden Phrase
 
@@ -209,6 +207,7 @@ Local `wrangler dev` defaults to `http://localhost:8787`.
 - If the browser shows `402`, inspect worker logs first; the browser can hide the real failure behind CORS or generic payment errors.
 - If Composer breaks after several minutes, check:
   - `composer_sessions`
-  - `consultations.smol_job_id`
-  - Smol auth JWT storage on `wallets`
+  - queue delivery for `oraclehunt-composer`
+  - R2 object writes in `oraclehunt-composer-audio`
+  - `consultations.composer_session_id`
 - If Hidden Oracle starts failing after a phrase change, verify that the ZK artifacts and verifier contract were regenerated together.
