@@ -7,14 +7,16 @@ It owns:
 - passkey-first login and wallet creation
 - username onboarding
 - x402 payment initiation from the browser
-- Codex, Gallery, Leaderboard, and Marketplace pages
+- Midnight Midway, Codex, Gallery, and Leaderboard pages
 - Hidden Oracle proof generation in the browser
 - server-side proxy routes for wallet registration, votes, faucet, and Hidden Oracle
 
 ## Folder Map
 
 - `src/app/page.tsx`: landing page and login flow
-- `src/app/marketplace/page.tsx`: oracle catalog and progress
+- `src/app/midway/page.tsx`: primary oracle hub and progress surface
+- `src/app/marketplace/page.tsx`: compatibility redirect to `/midway`
+- `src/app/how-it-works/page.tsx`: plain-English and technical product explanation
 - `src/app/oracle/[id]/page.tsx`: public oracle interaction page
 - `src/app/oracle/hidden/page.tsx`: Hidden Oracle UI
 - `src/app/codex/[wallet]/page.tsx`: one wallet's Codex
@@ -33,7 +35,7 @@ It owns:
 
 ### `/`
 
-The landing page does three things:
+The landing page is the Midnight Midway entrance. It does three things:
 
 - connect an existing passkey wallet
 - create a new passkey wallet
@@ -43,14 +45,18 @@ Current UI choice:
 
 - the identifier-based recovery flow is still implemented in `WalletProvider`, but it is intentionally not shown on the page anymore
 
-### `/marketplace`
+### `/midway`
 
 Shows:
 
-- six public oracles
+- six public oracle hosts
 - current fees
 - core-oracle progress
 - the Hidden Oracle teaser card
+
+### `/marketplace`
+
+Redirects to `/midway` so older links keep working.
 
 ### `/oracle/[id]`
 
@@ -60,13 +66,14 @@ Shared public-oracle page for:
 - `painter`
 - `composer`
 - `scribe`
-- `scholar`
+- `scholar` internally, displayed as Stella
 - `informant`
 
 Notes:
 
 - all public oracles pay through x402
 - Composer queues one MiniMax song and polls asynchronously
+- Stella returns answers directly from the Stella knowledge service
 - Informant shows previous Informant answers for the current wallet
 
 ### `/oracle/hidden`
@@ -97,14 +104,22 @@ Two public views:
 - Codex cards
 
 Voting happens here, not on the leaderboard.
+Votes apply to individual artifacts. Codex and leaderboard vote totals sum the artifact votes for each seeker.
 
 ### `/leaderboard`
 
-A single ranked board. It uses:
+Two ranked boards:
+
+- Seekers
+- Agentic Economy
+
+The seeker board uses:
 
 - core-oracle progress
 - then votes
 - then earliest completion
+
+The Agentic Economy board shows approximate gross revenue, estimated model cost, estimated profit, profit margin, run count, and oracle receiving wallet.
 
 Usernames are public and visible here from the start.
 
@@ -209,6 +224,8 @@ Current palette direction is intentionally closer to `stellar.org`:
 - warm light surfaces
 - deep ink text
 - soft lilac accents
+
+The Midway surfaces add darker carnival styling, host cards, video/image assets, and particle effects while keeping the same app routes and data model underneath.
 
 ## Environment Variables
 

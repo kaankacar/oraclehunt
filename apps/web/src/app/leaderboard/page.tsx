@@ -58,7 +58,7 @@ export default function LeaderboardPage() {
         </p>
         <p className="text-navy/45 text-xs mt-2">
           {board === 'seekers'
-            ? 'Votes are cast in the Gallery and apply to each seeker’s full Codex.'
+            ? 'Votes are cast in the Gallery on individual artifacts, then summed by seeker.'
             : 'Agentic Economy values are approximate: gross revenue minus estimated provider cost.'}
         </p>
         <p className="text-navy/40 text-xs font-mono">

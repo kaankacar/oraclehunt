@@ -1,12 +1,12 @@
 # Oracle Hunt
 
-Oracle Hunt is a passkey-first Stellar game built as a monorepo. Users create or reconnect a Stellar smart wallet, pay USDC through x402-gated oracle endpoints, collect artifacts in a personal Codex, and unlock a Hidden Oracle that uses client-side zero-knowledge proof generation plus Soroban verification.
+Oracle Hunt is a passkey-first Stellar game built as a monorepo. Users enter the Midnight Midway, create or reconnect a Stellar smart wallet, pay testnet USDC through x402-gated oracle endpoints, collect artifacts in a personal Codex, and unlock a Hidden Oracle that uses client-side zero-knowledge proof generation plus Soroban verification.
 
 This repo currently targets Stellar testnet in local/dev worker config.
 
 ## Repo Map
 
-- [`apps/web`](./apps/web/README.md): Next.js frontend, browser wallet flow, gallery, leaderboard, Codex, Hidden Oracle client proof generation.
+- [`apps/web`](./apps/web/README.md): Next.js frontend, Midnight Midway experience, browser wallet flow, gallery, leaderboard, Codex, Hidden Oracle client proof generation.
 - [`apps/workers`](./apps/workers/README.md): Cloudflare Worker API, x402 middleware, public oracle handlers, Composer/MiniMax orchestration, Hidden Oracle verification flow, faucet.
 - [`supabase`](./supabase/README.md): schema and migrations for wallets, consultations, votes, composer sessions, views.
 - [`packages/contracts`](./packages/contracts/README.md): Soroban fingerprint contract.
@@ -19,12 +19,14 @@ This repo currently targets Stellar testnet in local/dev worker config.
 Primary frontend routes:
 
 - `/`: passkey login / wallet creation / username onboarding
-- `/marketplace`: public oracle list and progress
-- `/oracle/[id]`: Seer, Painter, Composer, Scribe, Scholar, Informant
+- `/midway`: primary oracle hub and progress surface
+- `/marketplace`: compatibility redirect to `/midway`
+- `/oracle/[id]`: Seer, Painter, Composer, Scribe, Stella, Informant
 - `/oracle/hidden`: Hidden Oracle unlock and proof flow
 - `/codex/[wallet]`: one wallet's artifact collection
 - `/gallery`: all public artifacts and Codex cards
-- `/leaderboard`: single ranked board using core-oracle progress
+- `/leaderboard`: Seekers / Agentic Economy ranked boards
+- `/how-it-works`: nontechnical and technical explanation of the game flow
 
 Current product rules:
 
@@ -37,6 +39,7 @@ Current product rules:
   - `scribe`
   - `scholar`
 - `informant` and `hidden` still save to Codex and Gallery, but do not count toward progress completion.
+- Gallery votes target individual artifacts. Seeker vote totals are the sum of votes across that seeker's artifacts.
 
 ## High-Level Architecture
 
@@ -46,7 +49,7 @@ The Next app owns:
 
 - passkey wallet onboarding and reconnect
 - x402 client-side payment signing
-- page routing and artifact rendering
+- Midnight Midway routing and artifact rendering
 - local Hidden Oracle proof generation in the browser
 - server-side helper routes for wallet registration, votes, faucet proxying, and Hidden Oracle proxying
 
@@ -55,7 +58,7 @@ The Next app owns:
 The Cloudflare Worker owns:
 
 - x402 payment verification for public oracle endpoints
-- oracle execution against Gemini, Stella, or Cloudflare MiniMax
+- oracle execution against Gemini, Stella, or Cloudflare/Composer music generation
 - persistence into Supabase using the service key
 - Hidden Oracle challenge issuance and proof verification on Soroban
 - testnet faucet funding for new wallets
@@ -89,7 +92,7 @@ Stellar is used for:
 3. Worker responds through x402 middleware with payment requirements.
 4. Browser signs the USDC payment with the passkey wallet.
 5. Worker verifies the payment.
-6. Worker calls Gemini, Stella, or Cloudflare MiniMax depending on the oracle.
+6. Worker calls Gemini, Stella, or the Composer music flow depending on the oracle.
 7. Worker writes the consultation to Supabase.
 8. Frontend renders the artifact and execution trace.
 
@@ -105,7 +108,7 @@ Stellar is used for:
 ### Composer flow
 
 1. User pays for the Composer through x402 like any other public oracle.
-2. Worker creates a queued Composer session and enqueues one MiniMax Music 2.6 generation.
+2. Worker creates a queued Composer session and enqueues one music generation job.
 3. Worker returns `pending`, and the page polls the session id.
 4. The queue consumer saves the generated song URL.
 5. On completion, one audio URL is persisted to Supabase and rendered like a normal artifact.
@@ -121,7 +124,7 @@ These are the current public testnet identifiers used by local/dev worker config
 | USDC contract | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` | SAC used for oracle payments |
 | Fingerprint contract | `CCA6GIF5G75DLCTJNAWZQAFRATPE46PNSRQVXB2GZKNHBPKOXDTM3DUB` | `packages/contracts` deployment |
 | Hidden Oracle verifier contract | `CBWXMIRUF3SG2LRB52IQYSH3UYGHY3QJ5KOEMYXEPJ4TN5VSTCAJ7LQI` | `packages/hidden-oracle-verifier` deployment |
-| Composer model | `minimax/music-2.6` | Cloudflare Workers AI |
+| Composer model | `minimax/music-2.6` | Cloudflare Workers AI binding configured in Worker env |
 
 ## Important Implementation Notes
 
