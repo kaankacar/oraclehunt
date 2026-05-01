@@ -122,6 +122,8 @@ describe('x402 payment middleware', () => {
     const res = await app.fetch(req, mockEnv)
     expect(res.status).toBe(402)
     expect(res.headers.get('PAYMENT-REQUIRED')).not.toBeNull()
+    expect(res.headers.get('Access-Control-Allow-Origin')).not.toBeNull()
+    await expect(res.json()).resolves.toHaveProperty('error', 'Payment required')
   })
 
   it('builds payment routes with each oracle wallet as payTo', async () => {

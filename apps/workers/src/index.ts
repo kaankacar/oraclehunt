@@ -186,7 +186,17 @@ app.use('/oracle/:id', async (c, next) => {
   const routes = buildPaymentRoutes(c.env)
   const server = buildResourceServer(c.env)
 
-  await paymentMiddleware(routes, server)(c, next)
+  const paymentResponse = await paymentMiddleware(routes, server)(c, next)
+
+  if (paymentResponse) {
+    const headers = new Headers(paymentResponse.headers)
+    applyCorsHeaders(headers, c.env.ADMIN_CORS_ORIGIN ?? '*')
+    return new Response(paymentResponse.body, {
+      status: paymentResponse.status,
+      statusText: paymentResponse.statusText,
+      headers,
+    })
+  }
 
   // @x402/hono can replace the response after Hono's cors middleware runs.
   // Re-apply these headers so browsers can read the initial 402 challenge.
