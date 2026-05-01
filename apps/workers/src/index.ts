@@ -23,6 +23,8 @@ import type { Env, OracleId, OracleRequest } from './types'
 
 const VALID_ORACLE_IDS: OracleId[] = ['seer', 'painter', 'composer', 'scribe', 'scholar', 'informant']
 const VALID_PERSONALITIES = new Set(['default', 'sassy', 'slam_poet', 'crypto_degen'])
+const CORS_EXPOSE_HEADERS = 'PAYMENT-REQUIRED,PAYMENT-RESPONSE,X-PAYMENT-RESPONSE'
+const CORS_ALLOW_HEADERS = 'Content-Type,Authorization,PAYMENT-SIGNATURE,X-PAYMENT'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -60,12 +62,20 @@ function isConfirmedStellarTxHash(value: string | undefined): value is string {
   return Boolean(value && /^[0-9a-f]{64}$/i.test(value))
 }
 
+function applyCorsHeaders(headers: Headers, origin: string) {
+  headers.set('Access-Control-Allow-Origin', origin)
+  headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  headers.set('Access-Control-Allow-Headers', CORS_ALLOW_HEADERS)
+  headers.set('Access-Control-Expose-Headers', CORS_EXPOSE_HEADERS)
+}
+
 // CORS — expose x402 headers so the browser can read them
 app.use('*', async (c, next) => {
   const origin = c.env.ADMIN_CORS_ORIGIN ?? '*'
   return cors({
     origin,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'PAYMENT-SIGNATURE', 'X-PAYMENT'],
     exposeHeaders: ['PAYMENT-REQUIRED', 'PAYMENT-RESPONSE', 'X-PAYMENT-RESPONSE'],
   })(c, next)
 })
@@ -78,7 +88,9 @@ app.onError((err, c) => {
     500,
     {
       'Access-Control-Allow-Origin': origin,
-      'Access-Control-Expose-Headers': 'PAYMENT-REQUIRED,PAYMENT-RESPONSE,X-PAYMENT-RESPONSE',
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Headers': CORS_ALLOW_HEADERS,
+      'Access-Control-Expose-Headers': CORS_EXPOSE_HEADERS,
     },
   )
 })
@@ -174,7 +186,17 @@ app.use('/oracle/:id', async (c, next) => {
   const routes = buildPaymentRoutes(c.env)
   const server = buildResourceServer(c.env)
 
-  return paymentMiddleware(routes, server)(c, next)
+  await paymentMiddleware(routes, server)(c, next)
+
+  // @x402/hono can replace the response after Hono's cors middleware runs.
+  // Re-apply these headers so browsers can read the initial 402 challenge.
+  const headers = new Headers(c.res.headers)
+  applyCorsHeaders(headers, c.env.ADMIN_CORS_ORIGIN ?? '*')
+  c.res = new Response(c.res.body, {
+    status: c.res.status,
+    statusText: c.res.statusText,
+    headers,
+  })
 })
 
 // Oracle consultation endpoint
