@@ -13,3 +13,4 @@ codex_data.json
 __pycache__/
 .venv/
 .vercel
+tsconfig.tsbuildinfo

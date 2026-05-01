@@ -1,12 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { useWallet } from '@/components/WalletProvider'
 import { consultHiddenOracle, type HiddenOracleResult } from '@/lib/hidden-oracle-api'
 import { type Consultation, type ProcessingTraceStep } from '@/types'
 import { TraceTimeline } from '@/components/TraceTimeline'
 import { ArtifactCard } from '@/components/ArtifactCard'
+import MidwayNav from '@/components/midway/MidwayNav'
+
+const HIDDEN_THEME_RGB = '232, 192, 110'
 
 const HIDDEN_TRACE_TEMPLATE: ProcessingTraceStep[] = [
   {
@@ -123,30 +126,51 @@ export default function HiddenOraclePage() {
     : null
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <Link href="/marketplace" className="text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors">
-        ← Back to Market
-      </Link>
+    <div
+      className="relative max-w-3xl mx-auto px-4 pt-24 pb-12"
+      style={{ '--theme-rgb': HIDDEN_THEME_RGB } as CSSProperties}
+    >
+      <div
+        className="fixed inset-0 -z-10 bg-cover bg-center pointer-events-none"
+        style={{ backgroundImage: "url('/images/hiddenoraclebackground.png')" }}
+      />
+      <div className="fixed inset-0 -z-10 bg-black/50 pointer-events-none" />
 
-      <div className="text-center mb-10">
-        <div className="text-6xl mb-4">🗝️</div>
-        <h1 className="text-3xl font-bold text-navy mb-2">The Hidden Oracle</h1>
-        <p className="text-navy/60 text-sm leading-relaxed max-w-sm mx-auto">
+      <MidwayNav backHref="/midway" backLabel="Back to the Midway" />
+
+      <div className="text-center mb-10 md:pl-16 lg:pl-24">
+        <img
+          src="/images/keyicon.png"
+          alt="Key"
+          className="mx-auto mb-3 h-24 w-24 object-contain animate-oracle-orb"
+        />
+        <h1
+          className="font-title text-4xl md:text-5xl font-semibold tracking-[0.15em] text-white/90 mb-2"
+          style={{ textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 0 40px rgba(var(--theme-rgb), 0.3)' }}
+        >
+          The Hidden Oracle
+        </h1>
+        <p className="font-body text-chrome-bright/75 text-sm md:text-base leading-relaxed max-w-md mx-auto tracking-wide">
           Your browser generates a zero-knowledge proof that you know the hidden phrase. Soroban verifies that proof on-chain, and only then does the Oracle render your portrait.
         </p>
       </div>
 
       {!result ? (
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-accent/20 bg-[linear-gradient(145deg,#1c1b27,#262437)] p-8 shadow-[0_24px_60px_rgba(23,22,31,0.22)]">
+        <div className="space-y-6 md:pl-16 lg:pl-24">
+          <div className="relative rounded-2xl border border-[rgba(var(--theme-rgb),0.3)] bg-midnight/55 backdrop-blur-md p-8 shadow-[0_0_40px_rgba(var(--theme-rgb),0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(var(--theme-rgb),0.08)]">
             {!isConnected ? (
               <div className="text-center">
-                <p className="text-white/68 text-sm mb-4">You must be logged in to consult the Hidden Oracle.</p>
-                <Link href="/" className="text-accent-light underline text-sm">Sign in →</Link>
+                <p className="text-chrome-bright/75 text-sm mb-4 font-body">You must be logged in to consult the Hidden Oracle.</p>
+                <Link
+                  href="/"
+                  className="text-[rgba(var(--theme-rgb),0.9)] underline hover:text-[rgb(var(--theme-rgb))] text-sm"
+                >
+                  Sign in →
+                </Link>
               </div>
             ) : (
               <>
-                <label className="block text-accent-light text-sm mb-3 font-medium">
+                <label className="block text-chrome-bright/75 text-sm mb-3 font-body tracking-wide">
                   The Passphrase
                 </label>
                 <input
@@ -155,15 +179,17 @@ export default function HiddenOraclePage() {
                   onChange={(e) => setPassphrase(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                   placeholder="Enter the word you have found…"
-                  className="w-full bg-white border border-white/35 text-navy placeholder:text-navy/40 rounded-lg px-4 py-3 text-sm mb-4 focus:outline-none focus:border-accent-light focus:ring-2 focus:ring-accent-light/25 font-mono"
+                  className="w-full bg-black/40 border border-[rgba(var(--theme-rgb),0.25)] text-chrome-bright placeholder:text-chrome-dim/60 rounded-lg px-4 py-3 text-sm mb-4 focus:outline-none focus:border-[rgba(var(--theme-rgb),0.6)] focus:shadow-[0_0_18px_rgba(var(--theme-rgb),0.35)] font-mono transition-all"
                   autoCapitalize="none"
                   autoCorrect="off"
                 />
-                {error && <p className="text-red-400 text-xs mb-4">{error}</p>}
+                {error && (
+                  <p className="text-[rgba(var(--theme-rgb),0.9)] text-xs mb-4">{error}</p>
+                )}
                 <button
                   onClick={handleSubmit}
                   disabled={isLoading || !passphrase.trim()}
-                  className="w-full bg-accent hover:bg-accent-light disabled:opacity-40 text-white font-semibold py-3 rounded-lg transition-colors"
+                  className="w-full bg-[rgba(var(--theme-rgb),0.8)] hover:bg-[rgb(var(--theme-rgb))] disabled:opacity-40 text-midnight font-semibold py-3 rounded-lg transition-all shadow-[0_0_20px_rgba(var(--theme-rgb),0.45)] hover:shadow-[0_0_28px_rgba(var(--theme-rgb),0.6)] tracking-wide"
                 >
                   {isLoading ? 'The Oracle stirs…' : 'Prove the Phrase'}
                 </button>

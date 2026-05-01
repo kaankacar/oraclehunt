@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import type { Route } from 'next'
 import { useWallet } from './WalletProvider'
 
 const HOW_IT_WORKS_ROUTE = '/how-it-works' as Route
 
 export function Nav() {
+  const pathname = usePathname()
   const { address, displayAddress, balance, username, isConnected, logout } = useWallet()
   const [copied, setCopied] = useState(false)
 
@@ -17,6 +19,8 @@ export function Nav() {
     setCopied(true)
     setTimeout(() => setCopied(false), 1400)
   }
+
+  if (pathname === '/' || pathname === '/midway') return null
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-navy border-b border-accent/30">

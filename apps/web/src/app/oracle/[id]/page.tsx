@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type CSSProperties } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -23,6 +23,7 @@ import {
 import { getOracleHistory } from '@/lib/supabase'
 import { ArtifactCard } from '@/components/ArtifactCard'
 import { TraceTimeline } from '@/components/TraceTimeline'
+import MidwayNav from '@/components/midway/MidwayNav'
 
 const PUBLIC_TRACE_TEMPLATE: ProcessingTraceStep[] = [
   {
@@ -100,7 +101,7 @@ export default function OraclePage() {
 
   useEffect(() => {
     const found = ORACLES.find((entry) => entry.id === oracleId)
-    if (!found) router.push('/marketplace')
+    if (!found) router.push('/midway')
     else setOracle(found)
   }, [oracleId, router])
 
@@ -155,14 +156,45 @@ export default function OraclePage() {
     }
   }
 
-  const oracleAscii: Record<string, string> = {
-    seer: '✦ ✦ ✦  👁  ✦ ✦ ✦',
-    painter: '▓▒░ 🎨 ░▒▓',
-    composer: '♩ ♪ ♫ 🎵 ♫ ♪ ♩',
-    scribe: '— 📜 —',
-    scholar: '✦ ✨ Stella ✨ ✦',
-    informant: '// 🕵️ //',
-  }
+  const themedOracles = {
+    seer: {
+      rgb: '255, 45, 149',
+      background: '/images/seerimage.png',
+      icon: '/images/crystal_ball.png',
+      iconAlt: 'Crystal ball',
+    },
+    painter: {
+      rgb: '0, 229, 255',
+      background: '/images/painter_background.png',
+      icon: '/images/paintingicon.png',
+      iconAlt: "Painter's palette",
+    },
+    composer: {
+      rgb: '157, 78, 221',
+      background: '/images/composerbackground.png',
+      icon: '/images/musicicon.png',
+      iconAlt: 'Composer note',
+    },
+    scribe: {
+      rgb: '255, 179, 71',
+      background: '/images/scribebackground.png',
+      icon: '/images/scrollicon.png',
+      iconAlt: 'Scroll',
+    },
+    scholar: {
+      rgb: '74, 158, 255',
+      background: '/images/scholarbackground.png',
+      icon: '/images/bookicon.png',
+      iconAlt: 'Book',
+    },
+    informant: {
+      rgb: '57, 255, 20',
+      background: '/images/informantbackground.png',
+      icon: '/images/informanticon.png',
+      iconAlt: 'Informant sigil',
+    },
+  } as const
+  const themed = themedOracles[oracleId as keyof typeof themedOracles] ?? null
 
   const resultConsultation = result
     ? ({
@@ -183,31 +215,93 @@ export default function OraclePage() {
   const visibleTrace = liveTrace.length ? liveTrace : result?.processingTrace ?? PUBLIC_TRACE_TEMPLATE
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
-      <Link href="/marketplace" className="text-accent/70 hover:text-accent text-sm mb-8 inline-block transition-colors">
-        ← Back to Market
-      </Link>
+    <div
+      className="relative max-w-5xl mx-auto px-4 pt-24 pb-12"
+      style={themed ? ({ '--theme-rgb': themed.rgb } as CSSProperties) : undefined}
+    >
+      {themed && (
+        <>
+          <div
+            className="fixed inset-0 -z-10 bg-cover bg-center pointer-events-none"
+            style={{ backgroundImage: `url('${themed.background}')` }}
+          />
+          <div className="fixed inset-0 -z-10 bg-black/50 pointer-events-none" />
+        </>
+      )}
+      <MidwayNav backHref="/midway" backLabel="Back to the Midway" />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
-        <div>
+        <div className={themed ? 'md:pl-16 lg:pl-24' : ''}>
           <div className="text-center mb-10">
-            <p className="font-mono text-navy/40 text-sm mb-4 tracking-widest">
-              {oracleAscii[oracleId] ?? oracle.emoji}
+            {themed ? (
+              <img
+                src={themed.icon}
+                alt={themed.iconAlt}
+                className="mx-auto mb-3 h-24 w-24 object-contain animate-oracle-orb"
+              />
+            ) : (
+              <div className="text-5xl mb-3">{oracle.emoji}</div>
+            )}
+            <h1
+              className={
+                themed
+                  ? 'font-title text-4xl md:text-5xl lg:text-6xl font-semibold tracking-[0.1em] text-white/90 mb-2'
+                  : 'text-3xl font-bold text-navy mb-1'
+              }
+              style={
+                themed
+                  ? { textShadow: '0 2px 20px rgba(0,0,0,0.9), 0 0 40px rgba(var(--theme-rgb), 0.3)' }
+                  : undefined
+              }
+            >
+              {oracle.name}
+            </h1>
+            <p
+              className={
+                themed
+                  ? 'font-title text-white/90 text-base md:text-lg tracking-[0.1em] mb-2'
+                  : 'text-accent text-sm font-medium mb-2'
+              }
+            >
+              {oracle.specialty}
             </p>
-            <div className="text-5xl mb-3">{oracle.emoji}</div>
-            <h1 className="text-3xl font-bold text-navy mb-1">{oracle.name}</h1>
-            <p className="text-accent text-sm font-medium mb-2">{oracle.specialty}</p>
-            <span className="bg-light-blue text-accent font-mono text-sm font-semibold px-3 py-1 rounded">
+            <span
+              className={
+                themed
+                  ? 'inline-block bg-black/40 border border-[rgba(var(--theme-rgb),0.35)] text-[rgba(var(--theme-rgb),0.95)] font-mono text-sm font-semibold px-3 py-1 rounded tracking-wider backdrop-blur-sm shadow-[0_0_14px_rgba(var(--theme-rgb),0.25)]'
+                  : 'bg-light-blue text-accent font-mono text-sm font-semibold px-3 py-1 rounded'
+              }
+            >
               {oracle.fee} USDC per consultation
             </span>
           </div>
 
           {!result && (
-            <div className="bg-white rounded-2xl border border-accent/15 p-6 shadow-sm">
-              <p className="text-navy/60 text-sm mb-4 italic">{oracle.description}</p>
+            <div
+              className={
+                themed
+                  ? 'relative rounded-2xl border border-[rgba(var(--theme-rgb),0.3)] bg-midnight/55 backdrop-blur-md p-6 shadow-[0_0_40px_rgba(var(--theme-rgb),0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(var(--theme-rgb),0.08)]'
+                  : 'bg-white rounded-2xl border border-accent/15 p-6 shadow-sm'
+              }
+            >
+              <p
+                className={
+                  themed
+                    ? 'text-chrome-bright/75 text-sm mb-4 italic font-body tracking-wide'
+                    : 'text-navy/60 text-sm mb-4 italic'
+                }
+              >
+                {oracle.description}
+              </p>
               {showPersonalityControls && (
                 <div className="mb-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-navy/45 mb-2">
+                  <p
+                    className={
+                      themed
+                        ? 'text-xs font-semibold uppercase tracking-[0.16em] text-chrome-dim/80 mb-2'
+                        : 'text-xs font-semibold uppercase tracking-[0.16em] text-navy/45 mb-2'
+                    }
+                  >
                     Personality
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -216,11 +310,19 @@ export default function OraclePage() {
                         key={option.id}
                         type="button"
                         onClick={() => setPersonality(option.id)}
-                        className={`min-h-10 rounded-lg border px-3 text-xs font-medium transition-colors ${
-                          personality === option.id
-                            ? 'border-accent bg-accent text-white'
-                            : 'border-accent/15 bg-light-blue/50 text-navy/65 hover:border-accent/35'
-                        }`}
+                        className={
+                          themed
+                            ? `min-h-10 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                                personality === option.id
+                                  ? 'border-[rgba(var(--theme-rgb),0.8)] bg-[rgba(var(--theme-rgb),0.85)] text-midnight shadow-[0_0_16px_rgba(var(--theme-rgb),0.35)]'
+                                  : 'border-[rgba(var(--theme-rgb),0.2)] bg-black/25 text-chrome-bright/75 hover:border-[rgba(var(--theme-rgb),0.45)]'
+                              }`
+                            : `min-h-10 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                                personality === option.id
+                                  ? 'border-accent bg-accent text-white'
+                                  : 'border-accent/15 bg-light-blue/50 text-navy/65 hover:border-accent/35'
+                              }`
+                        }
                       >
                         {option.label}
                       </button>
@@ -234,22 +336,52 @@ export default function OraclePage() {
                 placeholder={getPlaceholder(oracleId)}
                 rows={4}
                 maxLength={1000}
-                className="w-full border border-navy/20 rounded-lg px-4 py-3 text-sm text-navy placeholder-navy/30 resize-none focus:outline-none focus:border-accent mb-4"
+                className={
+                  themed
+                    ? 'w-full rounded-lg px-4 py-3 text-sm resize-none mb-4 bg-black/40 border border-[rgba(var(--theme-rgb),0.25)] text-chrome-bright placeholder-chrome-dim/60 focus:outline-none focus:border-[rgba(var(--theme-rgb),0.6)] focus:shadow-[0_0_18px_rgba(var(--theme-rgb),0.35)] font-body transition-all'
+                    : 'w-full border border-navy/20 rounded-lg px-4 py-3 text-sm text-navy placeholder-navy/30 resize-none focus:outline-none focus:border-accent mb-4'
+                }
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-navy/30 font-mono">{prompt.length}/1000</span>
+                <span
+                  className={
+                    themed
+                      ? 'text-xs text-chrome-dim/70 font-mono tracking-wider'
+                      : 'text-xs text-navy/30 font-mono'
+                  }
+                >
+                  {prompt.length}/1000
+                </span>
                 <button
                   onClick={handleConsult}
                   disabled={isLoading || !prompt.trim() || !isConnected}
-                  className="bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors"
+                  className={
+                    themed
+                      ? 'bg-[rgba(var(--theme-rgb),0.8)] hover:bg-[rgb(var(--theme-rgb))] disabled:opacity-40 text-midnight font-semibold px-6 py-2.5 rounded-lg transition-all shadow-[0_0_20px_rgba(var(--theme-rgb),0.45)] hover:shadow-[0_0_28px_rgba(var(--theme-rgb),0.6)] tracking-wide'
+                      : 'bg-accent hover:bg-accent-light disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors'
+                  }
                 >
                   {isLoading ? (oracleId === 'composer' ? loadingLabel : 'Consulting…') : `Pay ${oracle.fee} & Consult`}
                 </button>
               </div>
-              {error && <p className="text-red-500 text-xs mt-3">{error}</p>}
+              {error && (
+                <p className={themed ? 'text-[rgba(var(--theme-rgb),0.9)] text-xs mt-3' : 'text-red-500 text-xs mt-3'}>
+                  {error}
+                </p>
+              )}
               {!isConnected && (
-                <p className="text-navy/50 text-xs mt-3">
-                  <Link href="/" className="text-accent underline">Sign in</Link> to consult the Oracle.
+                <p className={themed ? 'text-chrome-dim/80 text-xs mt-3' : 'text-navy/50 text-xs mt-3'}>
+                  <Link
+                    href="/"
+                    className={
+                      themed
+                        ? 'text-[rgba(var(--theme-rgb),0.9)] underline hover:text-[rgb(var(--theme-rgb))]'
+                        : 'text-accent underline'
+                    }
+                  >
+                    Sign in
+                  </Link>{' '}
+                  to consult the Host.
                 </p>
               )}
             </div>
@@ -259,7 +391,9 @@ export default function OraclePage() {
             <div className="mt-6 space-y-5">
               <ArtifactCard consultation={resultConsultation} />
               <div className="text-center space-y-3">
-                <p className="text-xs text-navy/50">Saved to your Codex</p>
+                <p className={themed ? 'text-xs text-chrome-dim/80 font-body tracking-wider uppercase' : 'text-xs text-navy/50'}>
+                  Saved to your Codex
+                </p>
                 <div className="flex gap-3 justify-center flex-wrap">
                   <button
                     onClick={() => {
@@ -268,19 +402,31 @@ export default function OraclePage() {
                       setLiveTrace([])
                       setError('')
                     }}
-                    className="text-sm border border-accent/30 text-accent px-4 py-2 rounded-lg hover:bg-light-blue transition-colors"
+                    className={
+                      themed
+                        ? 'text-sm border border-[rgba(var(--theme-rgb),0.35)] text-[rgba(var(--theme-rgb),0.95)] px-4 py-2 rounded-lg hover:bg-[rgba(var(--theme-rgb),0.12)] hover:border-[rgba(var(--theme-rgb),0.6)] transition-all backdrop-blur-sm tracking-wide'
+                        : 'text-sm border border-accent/30 text-accent px-4 py-2 rounded-lg hover:bg-light-blue transition-colors'
+                    }
                   >
                     Ask Again
                   </button>
                   <Link
-                    href="/marketplace"
-                    className="text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent-light transition-colors"
+                    href="/midway"
+                    className={
+                      themed
+                        ? 'text-sm bg-[rgba(var(--theme-rgb),0.8)] hover:bg-[rgb(var(--theme-rgb))] text-midnight font-semibold px-4 py-2 rounded-lg transition-all shadow-[0_0_18px_rgba(var(--theme-rgb),0.45)] hover:shadow-[0_0_26px_rgba(var(--theme-rgb),0.6)] tracking-wide'
+                        : 'text-sm bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent-light transition-colors'
+                    }
                   >
-                    More Oracles
+                    More Hosts
                   </Link>
                   <Link
                     href={`/codex/${address}`}
-                    className="text-sm border border-navy/20 text-navy/60 px-4 py-2 rounded-lg hover:bg-light-blue transition-colors"
+                    className={
+                      themed
+                        ? 'text-sm border border-chrome-dim/30 text-chrome-bright/80 px-4 py-2 rounded-lg hover:bg-white/5 hover:border-chrome-dim/60 hover:text-chrome-bright transition-all backdrop-blur-sm tracking-wide'
+                        : 'text-sm border border-navy/20 text-navy/60 px-4 py-2 rounded-lg hover:bg-light-blue transition-colors'
+                    }
                   >
                     My Codex
                   </Link>
@@ -299,25 +445,44 @@ export default function OraclePage() {
           />
 
           {oracleId === 'informant' && (
-            <div className="bg-white rounded-2xl border border-accent/15 p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-navy/45 mb-3">
+            <div
+              className={
+                themed
+                  ? 'rounded-2xl border border-[rgba(var(--theme-rgb),0.3)] bg-midnight/55 backdrop-blur-md p-5 shadow-[0_0_40px_rgba(var(--theme-rgb),0.18),inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_40px_rgba(var(--theme-rgb),0.08)]'
+                  : 'bg-white rounded-2xl border border-accent/15 p-5 shadow-sm'
+              }
+            >
+              <p
+                className={
+                  themed
+                    ? 'text-xs font-semibold uppercase tracking-[0.2em] text-[rgba(var(--theme-rgb),0.9)] mb-3'
+                    : 'text-xs font-semibold uppercase tracking-[0.2em] text-navy/45 mb-3'
+                }
+              >
                 Previous Informant Answers
               </p>
               {history.length === 0 ? (
-                <p className="text-sm text-navy/45">
+                <p className={themed ? 'text-sm text-chrome-dim/80 font-body' : 'text-sm text-navy/45'}>
                   Ask the Informant more than once. Previous riddles will stay here so clue patterns are visible.
                 </p>
               ) : (
                 <div className="space-y-4">
                   {history.map((entry) => (
-                    <div key={entry.id} className="border-b last:border-b-0 border-accent/10 pb-4 last:pb-0">
-                      <p className="text-xs font-mono text-navy/35 mb-2">
+                    <div
+                      key={entry.id}
+                      className={
+                        themed
+                          ? 'border-b last:border-b-0 border-[rgba(var(--theme-rgb),0.15)] pb-4 last:pb-0'
+                          : 'border-b last:border-b-0 border-accent/10 pb-4 last:pb-0'
+                      }
+                    >
+                      <p className={themed ? 'text-xs font-mono text-chrome-dim/60 mb-2 tracking-wider' : 'text-xs font-mono text-navy/35 mb-2'}>
                         {new Date(entry.created_at).toLocaleString()}
                       </p>
-                      <p className="text-xs italic text-navy/45 whitespace-pre-wrap mb-2">
+                      <p className={themed ? 'text-xs italic text-chrome-dim/80 whitespace-pre-wrap mb-2 font-body' : 'text-xs italic text-navy/45 whitespace-pre-wrap mb-2'}>
                         &ldquo;{entry.prompt}&rdquo;
                       </p>
-                      <p className="text-sm text-navy whitespace-pre-wrap leading-relaxed">
+                      <p className={themed ? 'text-sm text-chrome-bright whitespace-pre-wrap leading-relaxed font-body' : 'text-sm text-navy whitespace-pre-wrap leading-relaxed'}>
                         {entry.artifact_text}
                       </p>
                     </div>
@@ -448,5 +613,5 @@ function getPlaceholder(oracleId: string): string {
     scholar: "Ask Stella about Stellar, SDF, Soroban, Lumens, or the ecosystem…",
     informant: "Ask me anything. I speak only in riddles.",
   }
-  return placeholders[oracleId] ?? 'Your message to the Oracle…'
+  return placeholders[oracleId] ?? 'Your message to the Host…'
 }
