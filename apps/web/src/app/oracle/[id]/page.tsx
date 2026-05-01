@@ -14,7 +14,10 @@ import {
 import { useWallet } from '@/components/WalletProvider'
 import {
   consultOracle,
+  ensureSmolAuth,
   pollComposerJob,
+  resumeComposerJob,
+  type ComposerAuthRequiredResult,
   type ComposerErrorResult,
   type ComposerPendingResult,
   type OracleConsultResponse,
@@ -136,6 +139,7 @@ export default function OraclePage() {
       if (oracleId === 'composer') {
         const composerResult = await resolveComposerConsultation({
           initialResult: data,
+          walletAddress: address,
           setLiveTrace,
           setLoadingLabel,
         })
@@ -384,6 +388,12 @@ export default function OraclePage() {
                   to consult the Host.
                 </p>
               )}
+              {oracleId === 'composer' && isLoading && loadingLabel === 'Linking to Smol…' && (
+                <p className={themed ? 'text-chrome-dim/80 text-xs mt-3' : 'text-navy/50 text-xs mt-3'}>
+                  The Composer needs one more passkey assertion to link this wallet to Smol. This
+                  should only happen once per active Smol session.
+                </p>
+              )}
             </div>
           )}
 
@@ -503,6 +513,12 @@ function isComposerPendingResult(
   return 'status' in result && result.status === 'pending'
 }
 
+function isComposerAuthRequiredResult(
+  result: OracleConsultResponse,
+): result is ComposerAuthRequiredResult {
+  return 'status' in result && result.status === 'smol-auth-required'
+}
+
 function isComposerErrorResult(
   result: OracleConsultResponse,
 ): result is ComposerErrorResult {
@@ -511,14 +527,28 @@ function isComposerErrorResult(
 
 async function resolveComposerConsultation({
   initialResult,
+  walletAddress,
   setLiveTrace,
   setLoadingLabel,
 }: {
   initialResult: OracleConsultResponse
+  walletAddress: string
   setLiveTrace: (updater: ProcessingTraceStep[] | ((prev: ProcessingTraceStep[]) => ProcessingTraceStep[])) => void
   setLoadingLabel: (label: string) => void
 }): Promise<OracleResult> {
   let current: OracleConsultResponse = initialResult
+
+  while (isComposerAuthRequiredResult(current)) {
+    setLiveTrace(current.processingTrace)
+    setLoadingLabel('Linking to Smol…')
+    await ensureSmolAuth(walletAddress)
+
+    if (!current.txHash) {
+      throw new Error('Composer payment hash missing after Smol auth was requested.')
+    }
+
+    current = await resumeComposerJob(walletAddress, current.txHash)
+  }
 
   if (isComposerErrorResult(current)) {
     setLiveTrace(current.processingTrace)
@@ -527,7 +557,7 @@ async function resolveComposerConsultation({
 
   if (isComposerPendingResult(current)) {
     setLiveTrace(current.processingTrace)
-    setLoadingLabel('Composing…')
+    setLoadingLabel('Composing… (up to 6 minutes)')
 
     while (isComposerPendingResult(current)) {
       await delay(5000)

@@ -10,10 +10,8 @@ import { cors } from 'hono/cors'
 import { paymentMiddleware } from '@x402/hono'
 import { buildPaymentRoutes, buildResourceServer } from './middleware/payment'
 import {
-  getComposerAudio,
   handleComposerOracle,
   pollComposerStatus,
-  processComposerQueue,
   reconcileComposerSettlement,
   resumeComposerOracle,
 } from './oracles/composer'
@@ -284,15 +282,6 @@ app.get('/oracle/composer/status/:jobId', async (c) => {
   }
 })
 
-app.get('/composer/audio/:key', async (c) => {
-  const key = c.req.param('key')
-  if (!key?.trim()) {
-    return c.text('Not found', 404)
-  }
-
-  return getComposerAudio(c.env, decodeURIComponent(key))
-})
-
 // Oracle consultation endpoint
 app.post('/oracle/:id', async (c) => {
   const oracleId = c.req.param('id') as OracleId
@@ -373,5 +362,9 @@ app.post('/faucet', async (c) => {
 
 export default {
   fetch: app.fetch,
-  queue: processComposerQueue,
+  async queue(batch: MessageBatch<unknown>) {
+    for (const message of batch.messages) {
+      message.ack()
+    }
+  },
 }
