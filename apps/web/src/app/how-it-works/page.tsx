@@ -102,23 +102,6 @@ export default function HowItWorksPage() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-accent/10 bg-white p-5">
-          <h2 className="text-xl font-semibold text-navy mb-3">Why SDF People Might Care</h2>
-          <div className="grid gap-3 md:grid-cols-3">
-            <Callout title="Wallet UX">
-              Passkeys make account creation feel familiar while still producing a Stellar smart
-              account that can sign payments.
-            </Callout>
-            <Callout title="Agent Revenue">
-              Each oracle has payment and cost metadata, so the Leaderboard can show both seeker
-              progress and agent economics.
-            </Callout>
-            <Callout title="Proofs in Play">
-              The Hidden Oracle demonstrates a user-facing ZK flow where the proof happens locally
-              and the verification happens on Soroban.
-            </Callout>
-          </div>
-        </section>
       </div>
 
       <div className="mt-10 flex flex-wrap gap-3">
@@ -156,14 +139,5 @@ function Info({ title, children }: { title: string; children: ReactNode }) {
       <h3 className="text-sm font-semibold text-navy mb-2">{title}</h3>
       <p className="text-sm text-navy/60 leading-relaxed">{children}</p>
     </section>
-  )
-}
-
-function Callout({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="rounded-lg bg-light-blue/70 p-4">
-      <h3 className="text-sm font-semibold text-navy mb-2">{title}</h3>
-      <p className="text-sm text-navy/60 leading-relaxed">{children}</p>
-    </div>
   )
 }
