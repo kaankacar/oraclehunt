@@ -7,7 +7,7 @@ It owns:
 - passkey-first login and wallet creation
 - username onboarding
 - x402 payment initiation from the browser
-- Midnight Midway, Codex, Gallery, and Leaderboard pages
+- Midnight Midway, How It Works, Codex, Gallery, and Leaderboard pages
 - Hidden Oracle proof generation in the browser
 - server-side proxy routes for wallet registration, votes, faucet, and Hidden Oracle
 
@@ -53,6 +53,7 @@ Shows:
 - current fees
 - core-oracle progress
 - the Hidden Oracle teaser card
+- navigation to How It Works, Gallery, Leaderboard, and Codex
 
 ### `/marketplace`
 
@@ -72,7 +73,7 @@ Shared public-oracle page for:
 Notes:
 
 - all public oracles pay through x402
-- Composer starts a fal.ai ACE-Step music job and polls asynchronously
+- Composer starts one fal.ai ACE-Step prompt-to-audio music job and polls asynchronously until lyrics and audio are ready
 - Stella returns answers directly from the Stella knowledge service
 - Informant shows previous Informant answers for the current wallet
 

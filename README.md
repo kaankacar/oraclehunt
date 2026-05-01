@@ -58,7 +58,7 @@ The Next app owns:
 The Cloudflare Worker owns:
 
 - x402 payment verification for public oracle endpoints
-- oracle execution against Gemini, Stella, or Cloudflare/Composer music generation
+- oracle execution against Gemini, Stella, or fal.ai Composer music generation
 - persistence into Supabase using the service key
 - Hidden Oracle challenge issuance and proof verification on Soroban
 - testnet faucet funding for new wallets
@@ -108,10 +108,11 @@ Stellar is used for:
 ### Composer flow
 
 1. User pays for the Composer through x402 like any other public oracle.
-2. Worker creates a queued Composer session and enqueues one music generation job.
-3. Worker returns `pending`, and the page polls the session id.
-4. The queue consumer saves the generated song URL.
-5. On completion, one audio URL is persisted to Supabase and rendered like a normal artifact.
+2. Worker creates or reuses a Composer session keyed by the settled payment reference.
+3. Worker submits one fal.ai ACE-Step `prompt-to-audio` queue job.
+4. Worker returns `pending`, and the page polls the stable Composer session id.
+5. When fal.ai reports completion, the Worker fetches the generated song metadata.
+6. One hosted audio URL, lyrics, tags, seed, payment metadata, and the Composer trace are persisted to Supabase and rendered like a normal artifact.
 
 ## Current Runtime Identifiers
 

@@ -8,7 +8,7 @@ const EXPERIENCE_STEPS = [
   },
   {
     title: 'Choose a host',
-    body: 'Each Midway host is an AI oracle with a different specialty: prophecy, images, music, poetry, Stellar knowledge, or riddles.',
+    body: 'Each Midway host is an AI oracle with a different specialty: prophecy, images, music with lyrics, poetry, Stellar knowledge from Stella, or riddles.',
   },
   {
     title: 'Approve one small payment',
@@ -16,7 +16,7 @@ const EXPERIENCE_STEPS = [
   },
   {
     title: 'Watch the receipt',
-    body: 'The app shows a trace of what happened: payment preparation, passkey signing, Stellar settlement, AI generation, and Codex storage.',
+    body: 'The app shows a live trace of what happened: payment approval, Stellar settlement, AI generation, and Codex storage. Composer has its own six-step music trace because it runs asynchronously.',
   },
   {
     title: 'Collect and compare',
@@ -39,7 +39,7 @@ const TECH_DETAILS = [
   },
   {
     title: 'Different AI providers',
-    body: 'Most text and image hosts use the current Gemini routes, Stella answers directly from its Stellar knowledge service, and Composer is an async music-generation flow.',
+    body: 'Most text and image hosts use the current Gemini routes. Stella answers directly from its Stellar knowledge service. Composer submits one fal.ai ACE-Step music job and polls until the song URL and lyrics are ready.',
   },
   {
     title: 'Codex, Gallery, Leaderboard',
@@ -62,7 +62,9 @@ export default function HowItWorksPage() {
         <p className="text-navy/65 leading-relaxed">
           Oracle Hunt is a playable Stellar testnet demo. It lets people experience passkey
           smart wallets, USDC payments, AI agents, public collectibles, and a zero-knowledge
-          unlock without needing to read protocol docs first.
+          unlock without needing to read protocol docs first. The technical details are visible
+          for anyone who wants them, but the main path is meant to be understandable without
+          knowing Stellar, x402, or zero-knowledge proofs in advance.
         </p>
       </div>
 
@@ -72,8 +74,8 @@ export default function HowItWorksPage() {
             <h2 className="text-xl font-semibold text-navy mb-2">The Short Version</h2>
             <p className="text-sm text-navy/55 leading-relaxed">
               You enter the Midway, ask AI hosts for artifacts, pay with testnet USDC, and build
-              a public Codex. The technical rails are visible, but the experience is meant to feel
-              like a game first.
+              a public Codex. Think of each consultation as buying a small ticket: your passkey
+              approves it, the host produces something, and the artifact is saved for others to see.
             </p>
           </div>
           <div className="grid gap-3">
@@ -91,6 +93,7 @@ export default function HowItWorksPage() {
             <p className="text-sm text-navy/55 leading-relaxed">
               For technical readers, each consultation is also a traceable payment and execution
               path across the browser, Cloudflare Worker, Stellar testnet, AI providers, and Supabase.
+              The Hidden Oracle adds local proof generation in the browser plus Soroban verification.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">

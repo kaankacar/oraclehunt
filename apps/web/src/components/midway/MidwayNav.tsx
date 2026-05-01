@@ -43,6 +43,9 @@ export default function MidwayNav({
             <Link href="/leaderboard" className="text-base text-chrome-dim hover:text-white transition-colors">
               Leaderboard
             </Link>
+            <Link href="/how-it-works" className="text-base text-chrome-dim hover:text-white transition-colors">
+              How It Works
+            </Link>
             <Link
               href={
                 isConnected && address
@@ -56,6 +59,12 @@ export default function MidwayNav({
           </div>
 
           <div className="flex items-center gap-6 font-body">
+            <Link
+              href="/how-it-works"
+              className="hidden sm:block md:hidden text-sm text-chrome-dim hover:text-white transition-colors"
+            >
+              How It Works
+            </Link>
             {isConnected ? (
               <>
                 {displayAddress && (
